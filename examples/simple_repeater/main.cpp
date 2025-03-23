@@ -610,6 +610,7 @@ void halt() {
 }
 
 static char command[80];
+int nextSleep;
 
 void setup() {
   Serial.begin(115200);
@@ -656,6 +657,11 @@ void setup() {
   ui_task.begin(the_mesh.getNodeName(), FIRMWARE_BUILD_DATE);
 #endif
 
+  // Make sure the DIO1 and NSS GPIOs are hold on required levels during deep sleep 
+  rtc_gpio_set_direction((gpio_num_t)P_LORA_DIO_1, RTC_GPIO_MODE_INPUT_ONLY);
+  rtc_gpio_pulldown_en((gpio_num_t)P_LORA_DIO_1);
+  nextSleep = millis() + 30000; // first sleep after 30s
+
   // send out initial Advertisement to the mesh
   the_mesh.sendSelfAdvertisement(2000);
 }
@@ -669,6 +675,8 @@ void loop() {
       command[len] = 0;
     }
     Serial.print(c);
+    int ns = millis() + 10000;
+    nextSleep = ns > nextSleep ? ns : nextSleep; // postpone sleep by 10sec
   }
   if (len == sizeof(command)-1) {  // command buffer full
     command[sizeof(command)-1] = '\r';
@@ -686,4 +694,20 @@ void loop() {
   }
 
   the_mesh.loop();
+
+#ifdef ESP32_LIGHTSLEEP
+  if (millis() > nextSleep) {
+    if (digitalRead(P_LORA_BUSY) == LOW) {
+      esp_sleep_enable_timer_wakeup(600 * 1000000);
+      esp_sleep_enable_ext1_wakeup( (((uint64_t)1L) << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH);
+      esp_light_sleep_start();
+      // process the loop directly after wakeup
+      the_mesh.loop();
+      nextSleep = millis() + 5000; // 5sec wakeup
+    } else {
+      // retry in a sec
+      nextSleep = millis() + 1000;
+    }
+  }
+#endif
 }
