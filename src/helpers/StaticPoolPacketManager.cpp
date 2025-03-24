@@ -102,3 +102,7 @@ void StaticPoolPacketManager::queueInbound(mesh::Packet* packet, uint32_t schedu
 mesh::Packet* StaticPoolPacketManager::getNextInbound(uint32_t now) {
   return rx_queue.get(now);
 }
+
+int  StaticPoolPacketManager::getInboundCount() const {
+  return rx_queue.count();
+}

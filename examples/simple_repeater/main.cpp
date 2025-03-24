@@ -585,6 +585,10 @@ public:
     _phy->setOutputPower(power_dbm);
   }
 
+  bool active() {
+    return (_mgr->getOutboundCount() > 0) || (_mgr->getInboundCount() > 0) ;
+  }
+
   void loop() {
     mesh::Mesh::loop();
 
@@ -710,7 +714,7 @@ void loop() {
 
 #ifdef ESP32_LIGHTSLEEP
   if (millis() > nextSleep) {
-    if (digitalRead(P_LORA_BUSY) == LOW) {
+    if (!the_mesh.active()) {
       esp_sleep_enable_timer_wakeup(600 * 1000000);
       esp_sleep_enable_ext1_wakeup( (((uint64_t)1L) << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH);
       esp_light_sleep_start();
@@ -719,7 +723,8 @@ void loop() {
       nextSleep = millis() + 5000; // 5sec wakeup
     } else {
       // retry in a sec
-      nextSleep = millis() + 1000;
+      Serial.println("Still active ... wait more");
+      nextSleep = millis() + 5000;
     }
   }
 #endif
