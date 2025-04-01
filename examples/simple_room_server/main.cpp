@@ -767,6 +767,10 @@ public:
     radio_set_tx_power(power_dbm);
   }
 
+  bool active() {
+    return (_mgr->getOutboundCount() > 0);
+  }
+
   void loop() {
     mesh::Mesh::loop();
 
@@ -832,6 +836,7 @@ void halt() {
 }
 
 static char command[MAX_POST_TEXT_LEN+1];
+int nextSleep;
 
 void setup() {
   Serial.begin(115200);
@@ -872,6 +877,9 @@ void setup() {
   ui_task.begin(the_mesh.getNodeName(), FIRMWARE_BUILD_DATE);
 #endif
 
+
+  nextSleep = millis() + 30000; // first sleep after 30s
+
   // send out initial Advertisement to the mesh
   the_mesh.sendSelfAdvertisement(16000);
 }
@@ -885,6 +893,9 @@ void loop() {
       command[len] = 0;
     }
     Serial.print(c);
+
+    int ns = millis() + 10000;
+    nextSleep = ns > nextSleep ? ns : nextSleep; // postpone sleep by 10sec
   }
   if (len == sizeof(command)-1) {  // command buffer full
     command[sizeof(command)-1] = '\r';
@@ -902,4 +913,18 @@ void loop() {
   }
 
   the_mesh.loop();
+
+  if (millis() > nextSleep) {
+    if ((digitalRead(P_LORA_BUSY) == LOW) && (!the_mesh.active())) {
+      esp_sleep_enable_timer_wakeup(600 * 1000000);
+      esp_sleep_enable_ext1_wakeup( (((uint64_t)1L) << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH);
+      esp_light_sleep_start();
+      // process the loop directly after wakeup
+      the_mesh.loop();
+      nextSleep = millis() + 10000; // 10sec wakeup
+    } else {
+      // retry in 5 sec
+      nextSleep = millis() + 5000;
+    }
+  }
 }
