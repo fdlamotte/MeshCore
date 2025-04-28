@@ -607,6 +607,10 @@ public:
     ui_task.loop();
   #endif
   }
+
+  bool busy() {
+    _mgr->getOutboundCount () > 0;
+  }
 };
 
 StdRNG fast_rng;
@@ -681,29 +685,47 @@ void setup() {
 }
 
 void loop() {
-  int len = strlen(command);
-  while (Serial.available() && len < sizeof(command)-1) {
-    char c = Serial.read();
-    if (c != '\n') {
-      command[len++] = c;
-      command[len] = 0;
-    }
-    Serial.print(c);
-  }
-  if (len == sizeof(command)-1) {  // command buffer full
-    command[sizeof(command)-1] = '\r';
-  }
+  int msec = millis();
 
-  if (len > 0 && command[len - 1] == '\r') {  // received complete line
-    command[len - 1] = 0;  // replace newline with C string null terminator
-    char reply[160];
-    the_mesh.getCLI()->handleCommand(0, command, reply);  // NOTE: there is no sender_timestamp via serial!
-    if (reply[0]) {
-      Serial.print("  -> "); Serial.println(reply);
-    }
+  // int len = strlen(command);
+  // while (Serial.available() && len < sizeof(command)-1) {
+  //   char c = Serial.read();
+  //   if (c != '\n') {
+  //     command[len++] = c;
+  //     command[len] = 0;
+  //   }
+  //   Serial.print(c);
+  // }
+  // if (len == sizeof(command)-1) {  // command buffer full
+  //   command[sizeof(command)-1] = '\r';
+  // }
 
-    command[0] = 0;  // reset command buffer
-  }
+  // if (len > 0 && command[len - 1] == '\r') {  // received complete line
+  //   command[len - 1] = 0;  // replace newline with C string null terminator
+  //   char reply[160];
+  //   the_mesh.getCLI()->handleCommand(0, command, reply);  // NOTE: there is no sender_timestamp via serial!
+  //   if (reply[0]) {
+  //     Serial.print("  -> "); Serial.println(reply);
+  //   }
+
+  //   command[0] = 0;  // reset command buffer
+  // }
 
   the_mesh.loop();
+
+  while (millis() - msec < 500 
+      && !digitalRead(P_LORA_DIO_1) 
+//      && !Serial.available() 
+      && !the_mesh.busy() ) {  
+    delay (50);
+  }
+
+}
+
+// Try to provide a hook so the device can be in wfe in idle mode
+
+extern "C" {
+  void vApplicationIdleHook( void ) {
+    waitForEvent();
+  }
 }
