@@ -30,6 +30,8 @@ void XiaoNrf52Board::begin() {
   pinMode(VBAT_ENABLE, OUTPUT);
   digitalWrite(VBAT_ENABLE, HIGH);
 
+  sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+
 #if defined(PIN_WIRE_SDA) && defined(PIN_WIRE_SCL)
   Wire.setPins(PIN_WIRE_SDA, PIN_WIRE_SCL);
 #endif
