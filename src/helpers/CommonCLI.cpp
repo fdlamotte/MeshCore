@@ -24,7 +24,11 @@ void CommonCLI::loadPrefs(FILESYSTEM* fs) {
 }
 
 void CommonCLI::loadPrefsInt(FILESYSTEM* fs, const char* filename) {
+#if defined(RP2040_PLATFORM)
+  File file = fs->open(filename, "r");
+#else
   File file = fs->open(filename);
+#endif
   if (file) {
     uint8_t pad[8];
 
@@ -38,7 +42,7 @@ void CommonCLI::loadPrefsInt(FILESYSTEM* fs, const char* filename) {
     file.read((uint8_t *) &_prefs->tx_power_dbm, sizeof(_prefs->tx_power_dbm));  // 76
     file.read((uint8_t *) &_prefs->disable_fwd, sizeof(_prefs->disable_fwd));  // 77
     file.read((uint8_t *) &_prefs->advert_interval, sizeof(_prefs->advert_interval));  // 78
-    file.read((uint8_t *) &_prefs->flood_advert_interval, sizeof(_prefs->flood_advert_interval));  // 79
+    file.read((uint8_t *) pad, 1);  // 79  was 'unused'
     file.read((uint8_t *) &_prefs->rx_delay_base, sizeof(_prefs->rx_delay_base));  // 80
     file.read((uint8_t *) &_prefs->tx_delay_factor, sizeof(_prefs->tx_delay_factor));  // 84
     file.read((uint8_t *) &_prefs->guest_password[0], sizeof(_prefs->guest_password));  // 88
@@ -51,6 +55,7 @@ void CommonCLI::loadPrefsInt(FILESYSTEM* fs, const char* filename) {
     file.read((uint8_t *) &_prefs->bw, sizeof(_prefs->bw));  // 116
     file.read(pad, 4);   // 120
     file.read((uint8_t *) &_prefs->flood_max, sizeof(_prefs->flood_max));   // 124
+    file.read((uint8_t *) &_prefs->flood_advert_interval, sizeof(_prefs->flood_advert_interval));  // 125
 
     // sanitise bad pref values
     _prefs->rx_delay_base = constrain(_prefs->rx_delay_base, 0, 20.0f);
@@ -71,6 +76,8 @@ void CommonCLI::savePrefs(FILESYSTEM* fs) {
 #if defined(NRF52_PLATFORM)
   File file = fs->open("/com_prefs", FILE_O_WRITE);
   if (file) { file.seek(0); file.truncate(); }
+#elif defined(RP2040_PLATFORM)
+  File file = fs->open("/com_prefs", "w");
 #else
   File file = fs->open("/com_prefs", "w", true);
 #endif
@@ -88,7 +95,7 @@ void CommonCLI::savePrefs(FILESYSTEM* fs) {
     file.write((uint8_t *) &_prefs->tx_power_dbm, sizeof(_prefs->tx_power_dbm));  // 76
     file.write((uint8_t *) &_prefs->disable_fwd, sizeof(_prefs->disable_fwd));  // 77
     file.write((uint8_t *) &_prefs->advert_interval, sizeof(_prefs->advert_interval));  // 78
-    file.write((uint8_t *) &_prefs->flood_advert_interval, sizeof(_prefs->flood_advert_interval));  // 79
+    file.write((uint8_t *) pad, 1);  // 79  was 'unused'
     file.write((uint8_t *) &_prefs->rx_delay_base, sizeof(_prefs->rx_delay_base));  // 80
     file.write((uint8_t *) &_prefs->tx_delay_factor, sizeof(_prefs->tx_delay_factor));  // 84
     file.write((uint8_t *) &_prefs->guest_password[0], sizeof(_prefs->guest_password));  // 88
@@ -101,6 +108,7 @@ void CommonCLI::savePrefs(FILESYSTEM* fs) {
     file.write((uint8_t *) &_prefs->bw, sizeof(_prefs->bw));  // 116
     file.write(pad, 4);   // 120
     file.write((uint8_t *) &_prefs->flood_max, sizeof(_prefs->flood_max));   // 124
+    file.write((uint8_t *) &_prefs->flood_advert_interval, sizeof(_prefs->flood_advert_interval));  // 125
 
     file.close();
   }
@@ -153,6 +161,8 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, const char* command, ch
       } else {
         strcpy(reply, "(ERR: clock cannot go backwards)");
       }
+    } else if (memcmp(command, "neighbors", 9) == 0) {
+      _callbacks->formatNeighborsReply(reply);
     } else if (memcmp(command, "password ", 9) == 0) {
       // change admin password
       StrHelper::strncpy(_prefs->password, &command[9], sizeof(_prefs->password));
@@ -196,6 +206,11 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, const char* command, ch
         sprintf(reply, "> %d", (uint32_t) _prefs->tx_power_dbm);
       } else if (memcmp(config, "freq", 4) == 0) {
         sprintf(reply, "> %s", StrHelper::ftoa(_prefs->freq));
+      } else if (memcmp(config, "public.key", 10) == 0) {
+        strcpy(reply, "> ");
+        mesh::Utils::toHex(&reply[2], _callbacks->getSelfIdPubKey(), PUB_KEY_SIZE);
+      } else if (memcmp(config, "role", 4) == 0) {
+        sprintf(reply, "> %s", _callbacks->getRole());
       } else {
         sprintf(reply, "??: %s", config);
       }

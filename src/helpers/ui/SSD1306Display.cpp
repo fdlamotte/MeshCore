@@ -20,6 +20,11 @@ void SSD1306Display::turnOff() {
   _isOn = false;
 }
 
+void SSD1306Display::clear() {
+  display.clearDisplay();
+  display.display();
+}
+
 void SSD1306Display::startFrame(Color bkg) {
   display.clearDisplay();  // TODO: apply 'bkg'
   _color = SSD1306_WHITE;
@@ -33,7 +38,7 @@ void SSD1306Display::setTextSize(int sz) {
 }
 
 void SSD1306Display::setColor(Color c) {
-  _color = (c == LIGHT) ? SSD1306_WHITE : SSD1306_BLACK;
+  _color = (c != 0) ? SSD1306_WHITE : SSD1306_BLACK;
   display.setTextColor(_color);
 }
 
@@ -55,6 +60,13 @@ void SSD1306Display::drawRect(int x, int y, int w, int h) {
 
 void SSD1306Display::drawXbm(int x, int y, const uint8_t* bits, int w, int h) {
   display.drawBitmap(x, y, bits, w, h, SSD1306_WHITE);
+}
+
+uint16_t SSD1306Display::getTextWidth(const char* str) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
+  return w;
 }
 
 void SSD1306Display::endFrame() {

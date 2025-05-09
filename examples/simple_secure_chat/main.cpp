@@ -3,13 +3,12 @@
 
 #if defined(NRF52_PLATFORM)
   #include <InternalFileSystem.h>
+#elif defined(RP2040_PLATFORM)
+  #include <LittleFS.h>
 #elif defined(ESP32)
   #include <SPIFFS.h>
 #endif
 
-#define RADIOLIB_STATIC_ONLY 1
-#include <RadioLib.h>
-#include <helpers/RadioLibWrappers.h>
 #include <helpers/ArduinoHelpers.h>
 #include <helpers/StaticPoolPacketManager.h>
 #include <helpers/SimpleMeshTables.h>
@@ -91,7 +90,11 @@ class MyMesh : public BaseChatMesh, ContactVisitor {
 
   void loadContacts() {
     if (_fs->exists("/contacts")) {
+    #if defined(RP2040_PLATFORM)
+      File file = _fs->open("/contacts", "r");
+    #else
       File file = _fs->open("/contacts");
+    #endif
       if (file) {
         bool full = false;
         while (!full) {
@@ -126,6 +129,8 @@ class MyMesh : public BaseChatMesh, ContactVisitor {
 #if defined(NRF52_PLATFORM)
     File file = _fs->open("/contacts", FILE_O_WRITE);
     if (file) { file.seek(0); file.truncate(); }
+#elif defined(RP2040_PLATFORM)
+    File file = _fs->open("/contacts", "w");
 #else
     File file = _fs->open("/contacts", "w", true);
 #endif
@@ -193,6 +198,10 @@ protected:
     return 0;  // disable rxdelay
   }
 
+  bool allowPacketForward(const mesh::Packet* packet) override {
+    return true;
+  }
+
   void onDiscoveredContact(ContactInfo& contact, bool is_new) override {
     // TODO: if not in favs,  prompt to add as fav(?)
 
@@ -245,6 +254,10 @@ protected:
     Serial.printf("   %s\n", text);
   }
 
+  uint8_t onContactRequest(const ContactInfo& contact, uint32_t sender_timestamp, const uint8_t* data, uint8_t len, uint8_t* reply) override {
+    return 0;  // unknown
+  }
+
   void onContactResponse(const ContactInfo& contact, const uint8_t* data, uint8_t len) override {
     // not supported
   }
@@ -262,8 +275,7 @@ protected:
   }
 
 public:
-
-  MyMesh(RadioLibWrapper& radio, mesh::RNG& rng, mesh::RTCClock& rtc, SimpleMeshTables& tables)
+  MyMesh(mesh::Radio& radio, StdRNG& rng, mesh::RTCClock& rtc, SimpleMeshTables& tables)
      : BaseChatMesh(radio, *new ArduinoMillis(), rng, rtc, *new StaticPoolPacketManager(16), tables)
   {
     // defaults
@@ -287,17 +299,36 @@ public:
 
   #if defined(NRF52_PLATFORM)
     IdentityStore store(fs, "");
+  #elif defined(RP2040_PLATFORM)
+    IdentityStore store(fs, "/identity");
+    store.begin();
   #else
     IdentityStore store(fs, "/identity");
   #endif
     if (!store.load("_main", self_id, _prefs.node_name, sizeof(_prefs.node_name))) {  // legacy: node_name was from identity file
+      // Need way to get some entropy to seed RNG
+      Serial.println("Press ENTER to generate key:");
+      char c = 0;
+      while (c != '\n') {   // wait for ENTER to be pressed
+        if (Serial.available()) c = Serial.read();
+      }
+      ((StdRNG *)getRNG())->begin(millis());
+
       self_id = mesh::LocalIdentity(getRNG());  // create new random identity
+      int count = 0;
+      while (count < 10 && (self_id.pub_key[0] == 0x00 || self_id.pub_key[0] == 0xFF)) {  // reserved id hashes
+        self_id = mesh::LocalIdentity(getRNG()); count++;
+      }
       store.save("_main", self_id);
     }
 
     // load persisted prefs
     if (_fs->exists("/node_prefs")) {
+    #if defined(RP2040_PLATFORM)
+      File file = _fs->open("/node_prefs", "r");
+    #else
       File file = _fs->open("/node_prefs");
+    #endif
       if (file) {
         file.read((uint8_t *) &_prefs, sizeof(_prefs));
         file.close();
@@ -312,6 +343,8 @@ public:
 #if defined(NRF52_PLATFORM)
     File file = _fs->open("/node_prefs", FILE_O_WRITE);
     if (file) { file.seek(0); file.truncate(); }
+#elif defined(RP2040_PLATFORM)
+    File file = _fs->open("/node_prefs", "w");
 #else
     File file = _fs->open("/node_prefs", "w", true);
 #endif
@@ -325,6 +358,8 @@ public:
     Serial.println("===== MeshCore Chat Terminal =====");
     Serial.println();
     Serial.printf("WELCOME  %s\n", _prefs.node_name);
+    mesh::Utils::printHex(Serial, self_id.pub_key, PUB_KEY_SIZE);
+    Serial.println();
     Serial.println("   (enter 'help' for basic commands)");
     Serial.println();
   }
@@ -513,7 +548,7 @@ public:
 
 StdRNG fast_rng;
 SimpleMeshTables tables;
-MyMesh the_mesh(*new WRAPPER_CLASS(radio, board), fast_rng, *new VolatileRTCClock(), tables);
+MyMesh the_mesh(radio_driver, fast_rng, *new VolatileRTCClock(), tables); // TODO: test with 'rtc_clock' in target.cpp
 
 void halt() {
   while (1) ;
@@ -526,11 +561,14 @@ void setup() {
 
   if (!radio_init()) { halt(); }
 
-  fast_rng.begin(radio.random(0x7FFFFFFF));
+  fast_rng.begin(radio_get_rng_seed());
 
 #if defined(NRF52_PLATFORM)
   InternalFS.begin();
   the_mesh.begin(InternalFS);
+#elif defined(RP2040_PLATFORM)
+  LittleFS.begin();
+  the_mesh.begin(LittleFS);
 #elif defined(ESP32)
   SPIFFS.begin(true);
   the_mesh.begin(SPIFFS);
@@ -538,12 +576,8 @@ void setup() {
   #error "need to define filesystem"
 #endif
 
-  if (LORA_FREQ != the_mesh.getFreqPref()) {
-    radio.setFrequency(the_mesh.getFreqPref());
-  }
-  if (LORA_TX_POWER != the_mesh.getTxPowerPref()) {
-    radio.setOutputPower(the_mesh.getTxPowerPref());
-  }
+  radio_set_params(the_mesh.getFreqPref(), LORA_BW, LORA_SF, LORA_CR);
+  radio_set_tx_power(the_mesh.getTxPowerPref());
 
   the_mesh.showWelcome();
 

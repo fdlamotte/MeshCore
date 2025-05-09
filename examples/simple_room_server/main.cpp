@@ -3,17 +3,16 @@
 
 #if defined(NRF52_PLATFORM)
   #include <InternalFileSystem.h>
+#elif defined(RP2040_PLATFORM)
+  #include <LittleFS.h>
 #elif defined(ESP32)
   #include <SPIFFS.h>
 #endif
 
-#define RADIOLIB_STATIC_ONLY 1
-#include <RadioLib.h>
 #include <helpers/ArduinoHelpers.h>
 #include <helpers/StaticPoolPacketManager.h>
 #include <helpers/SimpleMeshTables.h>
 #include <helpers/IdentityStore.h>
-#include <helpers/AutoDiscoverRTCClock.h>
 #include <helpers/AdvertDataHelpers.h>
 #include <helpers/TxtDataHelpers.h>
 #include <helpers/CommonCLI.h>
@@ -23,11 +22,11 @@
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef FIRMWARE_BUILD_DATE
-  #define FIRMWARE_BUILD_DATE   "19 Mar 2025"
+  #define FIRMWARE_BUILD_DATE   "9 May 2025"
 #endif
 
 #ifndef FIRMWARE_VERSION
-  #define FIRMWARE_VERSION   "v1.4.0"
+  #define FIRMWARE_VERSION   "v1.6.0"
 #endif
 
 #ifndef LORA_FREQ
@@ -65,7 +64,7 @@
 #endif
 
 #ifndef MAX_UNSYNCED_POSTS
-  #define MAX_UNSYNCED_POSTS    16
+  #define MAX_UNSYNCED_POSTS    32
 #endif
 
 #ifdef DISPLAY_CLASS
@@ -76,6 +75,10 @@
   #include "UITask.h"
   static UITask ui_task(display);
 #endif
+
+#define FIRMWARE_ROLE "room_server"
+
+#define PACKET_LOG_FILE  "/packet_log"
 
 /* ------------------------------ Code -------------------------------- */
 
@@ -110,7 +113,7 @@ struct PostInfo {
 
 #define REPLY_DELAY_MILLIS         1500
 #define PUSH_NOTIFY_DELAY_MILLIS   2000
-#define SYNC_PUSH_INTERVAL         2000
+#define SYNC_PUSH_INTERVAL         1200
 
 #define PUSH_ACK_TIMEOUT_FLOOD    12000
 #define PUSH_TIMEOUT_BASE          4000
@@ -118,8 +121,9 @@ struct PostInfo {
 
 #define CLIENT_KEEP_ALIVE_SECS   128
 
-#define REQ_TYPE_GET_STATUS      0x01   // same as _GET_STATS
-#define REQ_TYPE_KEEP_ALIVE      0x02
+#define REQ_TYPE_GET_STATUS          0x01   // same as _GET_STATS
+#define REQ_TYPE_KEEP_ALIVE          0x02
+#define REQ_TYPE_GET_TELEMETRY_DATA  0x03
 
 #define RESP_SERVER_LOGIN_OK      0   // response to ANON_REQ
 
@@ -141,11 +145,9 @@ struct ServerStats {
 };
 
 class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
-  RadioLibWrapper* my_radio;
   FILESYSTEM* _fs;
-  RADIO_CLASS* _phy;
-  mesh::MainBoard* _board;
   unsigned long next_local_advert, next_flood_advert;
+  bool _logging;
   NodePrefs _prefs;
   CommonCLI _cli;
   uint8_t reply_data[MAX_PACKET_PAYLOAD];
@@ -156,6 +158,7 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
   int next_client_idx;  // for round-robin polling
   int next_post_idx;
   PostInfo posts[MAX_UNSYNCED_POSTS];   // cyclic queue
+  CayenneLPP telemetry;
 
   ClientInfo* putClient(const mesh::Identity& id) {
     for (int i = 0; i < num_clients; i++) {
@@ -233,6 +236,17 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
     }
   }
 
+  uint8_t getUnsyncedCount(ClientInfo* client) {
+    uint8_t count = 0;
+    for (int k = 0; k < MAX_UNSYNCED_POSTS; k++) {
+      if (posts[k].post_timestamp > client->sync_since   // is new post for this Client?
+        && !posts[k].author.matches(client->id)) {    // don't push posts to the author
+        count++;
+      }
+    }
+    return count;
+  }
+
   bool processAck(const uint8_t *data) {
     for (int i = 0; i < num_clients; i++) {
       auto client = &known_clients[i];
@@ -257,6 +271,61 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
    return createAdvert(self_id, app_data, app_data_len);
   }
 
+  File openAppend(const char* fname) {
+    #if defined(NRF52_PLATFORM)
+      return _fs->open(fname, FILE_O_WRITE);
+    #elif defined(RP2040_PLATFORM)
+      return _fs->open(fname, "a");
+    #else
+      return _fs->open(fname, "a", true);
+    #endif
+    }
+
+  int handleRequest(ClientInfo* sender, uint32_t sender_timestamp, uint8_t* payload, size_t payload_len) {
+    // uint32_t now = getRTCClock()->getCurrentTimeUnique();
+    // memcpy(reply_data, &now, 4);   // response packets always prefixed with timestamp
+    memcpy(reply_data, &sender_timestamp, 4);   // reflect sender_timestamp back in response packet (kind of like a 'tag')
+   
+    switch (payload[0]) {
+      case REQ_TYPE_GET_STATUS: {
+        ServerStats stats;
+        stats.batt_milli_volts = board.getBattMilliVolts();
+        stats.curr_tx_queue_len = _mgr->getOutboundCount();
+        stats.curr_free_queue_len = _mgr->getFreeCount();
+        stats.last_rssi = (int16_t) radio_driver.getLastRSSI();
+        stats.n_packets_recv = radio_driver.getPacketsRecv();
+        stats.n_packets_sent = radio_driver.getPacketsSent();
+        stats.total_air_time_secs = getTotalAirTime() / 1000;
+        stats.total_up_time_secs = _ms->getMillis() / 1000;
+        stats.n_sent_flood = getNumSentFlood();
+        stats.n_sent_direct = getNumSentDirect();
+        stats.n_recv_flood = getNumRecvFlood();
+        stats.n_recv_direct = getNumRecvDirect();
+        stats.n_full_events = getNumFullEvents();
+        stats.last_snr = (int16_t)(radio_driver.getLastSNR() * 4);
+        stats.n_direct_dups = ((SimpleMeshTables *)getTables())->getNumDirectDups();
+        stats.n_flood_dups = ((SimpleMeshTables *)getTables())->getNumFloodDups();
+        stats.n_posted = _num_posted;
+        stats.n_post_push = _num_post_pushes;
+
+        memcpy(&reply_data[4], &stats, sizeof(stats));
+        return 4 + sizeof(stats);
+      }
+
+      case REQ_TYPE_GET_TELEMETRY_DATA: {
+        telemetry.reset();
+        telemetry.addVoltage(TELEM_CHANNEL_SELF, (float)board.getBattMilliVolts() / 1000.0f);
+        // query other sensors -- target specific
+        sensors.querySensors(sender->permission == RoomPermission::ADMIN ? 0xFF : 0x00, telemetry);
+
+        uint8_t tlen = telemetry.getSize();
+        memcpy(&reply_data[4], telemetry.getBuffer(), tlen);
+        return 4 + tlen;  // reply_len
+      }
+    }
+    return 0;  // unknown command
+  }
+   
 protected:
   float getAirtimeBudgetFactor() const override {
     return _prefs.airtime_factor;
@@ -269,6 +338,55 @@ protected:
       mesh::Utils::printHex(Serial, raw, len);
       Serial.println();
     #endif
+  }
+
+  void logRx(mesh::Packet* pkt, int len, float score) override {
+    if (_logging) {
+      File f = openAppend(PACKET_LOG_FILE);
+      if (f) {
+        f.print(getLogDateTime());
+        f.printf(": RX, len=%d (type=%d, route=%s, payload_len=%d) SNR=%d RSSI=%d score=%d",
+          len, pkt->getPayloadType(), pkt->isRouteDirect() ? "D" : "F", pkt->payload_len,
+          (int)_radio->getLastSNR(), (int)_radio->getLastRSSI(), (int)(score*1000));
+
+        if (pkt->getPayloadType() == PAYLOAD_TYPE_PATH || pkt->getPayloadType() == PAYLOAD_TYPE_REQ
+          || pkt->getPayloadType() == PAYLOAD_TYPE_RESPONSE || pkt->getPayloadType() == PAYLOAD_TYPE_TXT_MSG) {
+          f.printf(" [%02X -> %02X]\n", (uint32_t)pkt->payload[1], (uint32_t)pkt->payload[0]);
+        } else {
+          f.printf("\n");
+        }
+        f.close();
+      }
+    }
+  }
+  void logTx(mesh::Packet* pkt, int len) override {
+    if (_logging) {
+      File f = openAppend(PACKET_LOG_FILE);
+      if (f) {
+        f.print(getLogDateTime());
+        f.printf(": TX, len=%d (type=%d, route=%s, payload_len=%d)",
+          len, pkt->getPayloadType(), pkt->isRouteDirect() ? "D" : "F", pkt->payload_len);
+
+        if (pkt->getPayloadType() == PAYLOAD_TYPE_PATH || pkt->getPayloadType() == PAYLOAD_TYPE_REQ
+          || pkt->getPayloadType() == PAYLOAD_TYPE_RESPONSE || pkt->getPayloadType() == PAYLOAD_TYPE_TXT_MSG) {
+          f.printf(" [%02X -> %02X]\n", (uint32_t)pkt->payload[1], (uint32_t)pkt->payload[0]);
+        } else {
+          f.printf("\n");
+        }
+        f.close();
+      }
+    }
+  }
+  void logTxFail(mesh::Packet* pkt, int len) override {
+    if (_logging) {
+      File f = openAppend(PACKET_LOG_FILE);
+      if (f) {
+        f.print(getLogDateTime());
+        f.printf(": TX FAIL!, len=%d (type=%d, route=%s, payload_len=%d)\n",
+          len, pkt->getPayloadType(), pkt->isRouteDirect() ? "D" : "F", pkt->payload_len);
+        f.close();
+      }
+    }
   }
 
   int calcRxDelay(float score, uint32_t air_time) const override {
@@ -342,7 +460,7 @@ protected:
       reply_data[4] = RESP_SERVER_LOGIN_OK;
       reply_data[5] = (CLIENT_KEEP_ALIVE_SECS >> 4);  // NEW: recommended keep-alive interval (secs / 16)
       reply_data[6] = (perm == RoomPermission::ADMIN ? 1 : (perm == RoomPermission::GUEST ? 0 : 2));
-      reply_data[7] = 0;  // FUTURE: reserved
+      reply_data[7] = getUnsyncedCount(client);  // NEW
       memcpy(&reply_data[8], "OK", 2);  // REVISIT: not really needed
 
       next_push = futureMillis(PUSH_NOTIFY_DELAY_MILLIS);  // delay next push, give RESPONSE packet time to arrive first
@@ -516,47 +634,26 @@ protected:
 
             auto reply = createAck(ack_hash);
             if (reply) {
+              reply->payload[reply->payload_len++] = getUnsyncedCount(client);  // NEW: add unsynced counter to end of ACK packet
               sendDirect(reply, client->out_path, client->out_path_len);
             }
           }
-        } else if (data[4] == REQ_TYPE_GET_STATUS) {
-          ServerStats stats;
-          stats.batt_milli_volts = board.getBattMilliVolts();
-          stats.curr_tx_queue_len = _mgr->getOutboundCount();
-          stats.curr_free_queue_len = _mgr->getFreeCount();
-          stats.last_rssi = (int16_t) my_radio->getLastRSSI();
-          stats.n_packets_recv = my_radio->getPacketsRecv();
-          stats.n_packets_sent = my_radio->getPacketsSent();
-          stats.total_air_time_secs = getTotalAirTime() / 1000;
-          stats.total_up_time_secs = _ms->getMillis() / 1000;
-          stats.n_sent_flood = getNumSentFlood();
-          stats.n_sent_direct = getNumSentDirect();
-          stats.n_recv_flood = getNumRecvFlood();
-          stats.n_recv_direct = getNumRecvDirect();
-          stats.n_full_events = getNumFullEvents();
-          stats.last_snr = (int16_t)(my_radio->getLastSNR() * 4);
-          stats.n_direct_dups = ((SimpleMeshTables *)getTables())->getNumDirectDups();
-          stats.n_flood_dups = ((SimpleMeshTables *)getTables())->getNumFloodDups();
-          stats.n_posted = _num_posted;
-          stats.n_post_push = _num_post_pushes;
-
-          now = getRTCClock()->getCurrentTimeUnique();
-          memcpy(reply_data, &now, 4);   // response packets always prefixed with timestamp
-          memcpy(&reply_data[4], &stats, sizeof(stats));
-          uint8_t reply_len = 4 + sizeof(stats);
-  
-          if (packet->isRouteFlood()) {
-            // let this sender know path TO here, so they can use sendDirect(), and ALSO encode the response
-            mesh::Packet* path = createPathReturn(client->id, secret, packet->path, packet->path_len,
-                                                  PAYLOAD_TYPE_RESPONSE, reply_data, reply_len);
-            if (path) sendFlood(path);
-          } else {
-            mesh::Packet* reply = createDatagram(PAYLOAD_TYPE_RESPONSE, client->id, secret, reply_data, reply_len);
-            if (reply) {
-              if (client->out_path_len >= 0) {  // we have an out_path, so send DIRECT
-                sendDirect(reply, client->out_path, client->out_path_len);
-              } else {
-                sendFlood(reply);
+        } else {
+          int reply_len = handleRequest(client, sender_timestamp, &data[4], len - 4);
+          if (reply_len > 0) {  // valid command
+            if (packet->isRouteFlood()) {
+              // let this sender know path TO here, so they can use sendDirect(), and ALSO encode the response
+              mesh::Packet* path = createPathReturn(client->id, secret, packet->path, packet->path_len,
+                                                    PAYLOAD_TYPE_RESPONSE, reply_data, reply_len);
+              if (path) sendFlood(path);
+            } else {
+              mesh::Packet* reply = createDatagram(PAYLOAD_TYPE_RESPONSE, client->id, secret, reply_data, reply_len);
+              if (reply) {
+                if (client->out_path_len >= 0) {  // we have an out_path, so send DIRECT
+                  sendDirect(reply, client->out_path, client->out_path_len);
+                } else {
+                  sendFlood(reply);
+                }
               }
             }
           }
@@ -593,12 +690,12 @@ protected:
   }
 
 public:
-  MyMesh(RADIO_CLASS& phy, mesh::MainBoard& board, RadioLibWrapper& radio, mesh::MillisecondClock& ms, mesh::RNG& rng, mesh::RTCClock& rtc, mesh::MeshTables& tables)
+  MyMesh(mesh::MainBoard& board, mesh::Radio& radio, mesh::MillisecondClock& ms, mesh::RNG& rng, mesh::RTCClock& rtc, mesh::MeshTables& tables)
      : mesh::Mesh(radio, ms, rng, rtc, *new StaticPoolPacketManager(32), tables),
-        _phy(&phy), _board(&board), _cli(board, this, &_prefs, this)
+      _cli(board, rtc, &_prefs, this), telemetry(MAX_PACKET_PAYLOAD - 4)
   {
-    my_radio = &radio;
     next_local_advert = next_flood_advert = 0;
+    _logging = false;
 
     // defaults
     memset(&_prefs, 0, sizeof(_prefs));
@@ -638,18 +735,20 @@ public:
     // load persisted prefs
     _cli.loadPrefs(_fs);
 
-    _phy->setFrequency(_prefs.freq);
-    _phy->setSpreadingFactor(_prefs.sf);
-    _phy->setBandwidth(_prefs.bw);
-    _phy->setCodingRate(_prefs.cr);
-    _phy->setOutputPower(_prefs.tx_power_dbm);
+    radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
+    radio_set_tx_power(_prefs.tx_power_dbm);
 
     updateAdvertTimer();
+    updateFloodAdvertTimer();
   }
 
   const char* getFirmwareVer() override { return FIRMWARE_VERSION; }
   const char* getBuildDate() override { return FIRMWARE_BUILD_DATE; }
+  const char* getRole() override { return FIRMWARE_ROLE; }
   const char* getNodeName() { return _prefs.node_name; }
+  NodePrefs* getNodePrefs() { 
+    return &_prefs; 
+  }
 
   void savePrefs() override {
     _cli.savePrefs(_fs);
@@ -658,6 +757,8 @@ public:
   bool formatFileSystem() override {
     #if defined(NRF52_PLATFORM)
       return InternalFS.format();
+    #elif defined(RP2040_PLATFORM)
+      return LittleFS.format();
     #elif defined(ESP32)
       return SPIFFS.format();
     #else
@@ -690,13 +791,37 @@ public:
     }
   }
 
-  void setLoggingOn(bool enable) override { /* no-op */ }
-  void eraseLogFile() override { /* no-op */ }
-  void dumpLogFile() override { /* no-op */ }
+  void setLoggingOn(bool enable) override { _logging = enable; }
+
+  void eraseLogFile() override {
+    _fs->remove(PACKET_LOG_FILE);
+  }
+
+  void dumpLogFile() override {
+  #if defined(RP2040_PLATFORM)
+    File f = _fs->open(PACKET_LOG_FILE, "r");
+  #else
+    File f = _fs->open(PACKET_LOG_FILE);
+  #endif
+    if (f) {
+      while (f.available()) {
+        int c = f.read();
+        if (c < 0) break;
+        Serial.print((char)c);
+      }
+      f.close();
+    }
+  }
 
   void setTxPower(uint8_t power_dbm) override {
-    _phy->setOutputPower(power_dbm);
+    radio_set_tx_power(power_dbm);
   }
+
+  void formatNeighborsReply(char *reply) override {
+    strcpy(reply, "not supported");
+  }
+
+  const uint8_t* getSelfIdPubKey() { return self_id.pub_key; }
 
   void loop() {
     mesh::Mesh::loop();
@@ -713,6 +838,7 @@ public:
       }
       // check next Round-Robin client, and sync next new post
       auto client = &known_clients[next_client_idx];
+      bool did_push = false;
       if (client->pending_ack == 0 && client->last_activity != 0 && client->push_failures < 3) {  // not already waiting for ACK, AND not evicted, AND retries not max
         MESH_DEBUG_PRINTLN("loop - checking for client %02X", (uint32_t) client->id.pub_key[0]);
         for (int k = 0, idx = next_post_idx; k < MAX_UNSYNCED_POSTS; k++) {
@@ -720,6 +846,7 @@ public:
             && !posts[idx].author.matches(client->id)) {    // don't push posts to the author
             // push this post to Client, then wait for ACK
             pushPostToClient(client, posts[idx]);
+            did_push = true;
             MESH_DEBUG_PRINTLN("loop - pushed to client %02X: %s", (uint32_t) client->id.pub_key[0], posts[idx].text);
             break;
           }
@@ -730,7 +857,12 @@ public:
       }
       next_client_idx = (next_client_idx + 1) % num_clients;  // round robin polling for each client
 
-      next_push = futureMillis(SYNC_PUSH_INTERVAL);
+      if (did_push) {
+        next_push = futureMillis(SYNC_PUSH_INTERVAL);
+      } else {
+        // were no unsynced posts for curr client, so proccess next client much quicker! (in next loop())
+        next_push = futureMillis(SYNC_PUSH_INTERVAL / 8);
+      }
     }
 
     if (next_flood_advert && millisHasNowPassed(next_flood_advert)) {
@@ -756,15 +888,7 @@ public:
 
 StdRNG fast_rng;
 SimpleMeshTables tables;
-
-#ifdef ESP32
-ESP32RTCClock fallback_clock;
-#else
-VolatileRTCClock fallback_clock;
-#endif
-AutoDiscoverRTCClock rtc_clock(fallback_clock);
-
-MyMesh the_mesh(radio, board, *new WRAPPER_CLASS(radio, board), *new ArduinoMillis(), fast_rng, rtc_clock, tables);
+MyMesh the_mesh(board, radio_driver, *new ArduinoMillis(), fast_rng, rtc_clock, tables);
 
 void halt() {
   while (1) ;
@@ -777,20 +901,29 @@ void setup() {
   delay(1000);
 
   board.begin();
-#ifdef ESP32
-  fallback_clock.begin();
+
+#ifdef DISPLAY_CLASS
+  if(display.begin()){
+    display.startFrame();
+    display.print("Please wait...");
+    display.endFrame();
+  }
 #endif
-  rtc_clock.begin(Wire);
 
   if (!radio_init()) { halt(); }
 
-  fast_rng.begin(radio.random(0x7FFFFFFF));
+  fast_rng.begin(radio_get_rng_seed());
 
   FILESYSTEM* fs;
 #if defined(NRF52_PLATFORM)
   InternalFS.begin();
   fs = &InternalFS;
   IdentityStore store(InternalFS, "");
+#elif defined(RP2040_PLATFORM)
+  LittleFS.begin();
+  fs = &LittleFS;
+  IdentityStore store(LittleFS, "/identity");
+  store.begin();
 #elif defined(ESP32)
   SPIFFS.begin(true);
   fs = &SPIFFS;
@@ -799,8 +932,11 @@ void setup() {
   #error "need to define filesystem"
 #endif
   if (!store.load("_main", the_mesh.self_id)) {
-    RadioNoiseListener rng(radio);
-    the_mesh.self_id = mesh::LocalIdentity(&rng);  // create new random identity
+    the_mesh.self_id = radio_new_identity();   // create new random identity
+    int count = 0;
+    while (count < 10 && (the_mesh.self_id.pub_key[0] == 0x00 || the_mesh.self_id.pub_key[0] == 0xFF)) {  // reserved id hashes
+      the_mesh.self_id = radio_new_identity(); count++;
+    }
     store.save("_main", the_mesh.self_id);
   }
 
@@ -809,11 +945,12 @@ void setup() {
 
   command[0] = 0;
 
+  sensors.begin();
+
   the_mesh.begin(fs);
 
 #ifdef DISPLAY_CLASS
-  display.begin();
-  ui_task.begin(the_mesh.getNodeName(), FIRMWARE_BUILD_DATE);
+  ui_task.begin(the_mesh.getNodePrefs(), FIRMWARE_BUILD_DATE, FIRMWARE_VERSION);
 #endif
 
   // send out initial Advertisement to the mesh
@@ -846,4 +983,5 @@ void loop() {
   }
 
   the_mesh.loop();
+  sensors.loop();
 }
