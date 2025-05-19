@@ -22,11 +22,11 @@
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef FIRMWARE_BUILD_DATE
-  #define FIRMWARE_BUILD_DATE   "21 Apr 2025"
+  #define FIRMWARE_BUILD_DATE   "9 May 2025"
 #endif
 
 #ifndef FIRMWARE_VERSION
-  #define FIRMWARE_VERSION   "v1.5.1"
+  #define FIRMWARE_VERSION   "v1.6.0"
 #endif
 
 #ifndef LORA_FREQ
@@ -138,7 +138,7 @@ struct ServerStats {
   uint32_t total_up_time_secs;
   uint32_t n_sent_flood, n_sent_direct;
   uint32_t n_recv_flood, n_recv_direct;
-  uint16_t n_full_events;
+  uint16_t err_events;          // was 'n_full_events'
   int16_t  last_snr;   // x 4
   uint16_t n_direct_dups, n_flood_dups;
   uint16_t n_posted, n_post_push;
@@ -290,7 +290,7 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
       case REQ_TYPE_GET_STATUS: {
         ServerStats stats;
         stats.batt_milli_volts = board.getBattMilliVolts();
-        stats.curr_tx_queue_len = _mgr->getOutboundCount();
+        stats.curr_tx_queue_len = _mgr->getOutboundCount(0xFFFFFFFF);
         stats.curr_free_queue_len = _mgr->getFreeCount();
         stats.last_rssi = (int16_t) radio_driver.getLastRSSI();
         stats.n_packets_recv = radio_driver.getPacketsRecv();
@@ -301,7 +301,7 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
         stats.n_sent_direct = getNumSentDirect();
         stats.n_recv_flood = getNumRecvFlood();
         stats.n_recv_direct = getNumRecvDirect();
-        stats.n_full_events = getNumFullEvents();
+        stats.err_events = _err_flags;
         stats.last_snr = (int16_t)(radio_driver.getLastSNR() * 4);
         stats.n_direct_dups = ((SimpleMeshTables *)getTables())->getNumDirectDups();
         stats.n_flood_dups = ((SimpleMeshTables *)getTables())->getNumFloodDups();
@@ -692,7 +692,7 @@ protected:
 public:
   MyMesh(mesh::MainBoard& board, mesh::Radio& radio, mesh::MillisecondClock& ms, mesh::RNG& rng, mesh::RTCClock& rtc, mesh::MeshTables& tables)
      : mesh::Mesh(radio, ms, rng, rtc, *new StaticPoolPacketManager(32), tables),
-      _cli(board, this, &_prefs, this), telemetry(MAX_PACKET_PAYLOAD - 4)
+      _cli(board, rtc, &_prefs, this), telemetry(MAX_PACKET_PAYLOAD - 4)
   {
     next_local_advert = next_flood_advert = 0;
     _logging = false;
@@ -819,6 +819,14 @@ public:
 
   void formatNeighborsReply(char *reply) override {
     strcpy(reply, "not supported");
+  }
+
+  const uint8_t* getSelfIdPubKey() override { return self_id.pub_key; }
+
+  void clearStats() override {
+    radio_driver.resetStats();
+    resetStats();
+    ((SimpleMeshTables *)getTables())->resetStats();
   }
 
   void loop() {
