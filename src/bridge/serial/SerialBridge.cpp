@@ -47,6 +47,9 @@ void SerialBridge::setup() {
   BRIDGE_OVER_SERIAL.setPins(BRIDGE_OVER_SERIAL_RX, BRIDGE_OVER_SERIAL_TX);
 #elif defined(RP2040_PLATFORM)
   BRIDGE_OVER_SERIAL.setPinout(BRIDGE_OVER_SERIAL_TX, BRIDGE_OVER_SERIAL_RX);
+#elif defined(STM32_PLATFORM)
+  BRIDGE_OVER_SERIAL.setRx(BRIDGE_OVER_SERIAL_RX);
+  BRIDGE_OVER_SERIAL.setTx(BRIDGE_OVER_SERIAL_TX);
 #else
 #error SerialBridge was not tested on the current platform
 #endif
