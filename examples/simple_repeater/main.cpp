@@ -19,6 +19,11 @@
 #include <RTClib.h>
 #include <target.h>
 
+#ifdef BRIDGE_OVER_SERIAL
+#include "bridge/serial/SerialBridge.h"
+extern bridge::SerialBridge *bridge_interface;
+#endif
+
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef FIRMWARE_BUILD_DATE
@@ -297,6 +302,10 @@ protected:
     }
   }
   void logTx(mesh::Packet* pkt, int len) override {
+    #ifdef BRIDGE_OVER_SERIAL
+      bridge_interface->sendPacket(pkt); // the packet has been flagged to be repeated ...
+    #endif
+
     if (_logging) {
       File f = openAppend(PACKET_LOG_FILE);
       if (f) {
@@ -729,6 +738,17 @@ public:
   #ifdef DISPLAY_CLASS
     ui_task.loop();
   #endif
+
+  #ifdef BRIDGE_OVER_SERIAL
+    uint8_t raw[MAX_TRANS_UNIT+1];
+    bridge_interface->loop();
+    int len = bridge_interface->getPacket(raw);
+    if (len > 0) {
+      mesh::Packet* pkt = _mgr->allocNew();
+      pkt->readFrom(raw, len);
+      _mgr->queueInbound(pkt, millis());
+    }
+    #endif
   }
 };
 
@@ -836,10 +856,6 @@ void loop() {
 
     command[0] = 0;  // reset command buffer
   }
-
-#ifdef BRIDGE_OVER_SERIAL
-  bridge_interface->loop();
-#endif
 
   the_mesh.loop();
   sensors.loop();
