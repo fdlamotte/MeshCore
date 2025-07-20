@@ -172,17 +172,22 @@ bool T1000SensorManager::querySensors(uint8_t requester_permissions, CayenneLPP&
 void T1000SensorManager::loop() {
   static long next_gps_update = 0;
 
-  _nmea->loop();
+  if (gps_active) {
 
-  if (millis() > next_gps_update) {
-    if (gps_active && _nmea->isValid()) {
-      node_lat = ((double)_nmea->getLatitude())/1000000.;
-      node_lon = ((double)_nmea->getLongitude())/1000000.;
-      node_altitude = ((double)_nmea->getAltitude()) / 1000.0;
-      //Serial.printf("lat %f lon %f\r\n", _lat, _lon);
+    _nmea->loop();
+
+    if (millis() > next_gps_update) {
+      if (gps_active && _nmea->isValid()) {
+        node_lat = ((double)_nmea->getLatitude())/1000000.;
+        node_lon = ((double)_nmea->getLongitude())/1000000.;
+        node_altitude = ((double)_nmea->getAltitude()) / 1000.0;
+        //Serial.printf("lat %f lon %f\r\n", _lat, _lon);
+      }
+      next_gps_update = millis() + 1000;
     }
-    next_gps_update = millis() + 1000;
   }
+
+  delay(1);
 }
 
 int T1000SensorManager::getNumSettings() const { return 1; }  // just one supported: "gps" (power switch)
@@ -206,4 +211,12 @@ bool T1000SensorManager::setSettingValue(const char* name, const char* value) {
     return true;
   }
   return false;  // not supported
+}
+
+// Try to provide a hook so the device can be in wfe in idle mode
+
+extern "C" {
+  void vApplicationIdleHook( void ) {
+    waitForEvent();
+  }
 }
