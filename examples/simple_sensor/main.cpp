@@ -15,7 +15,7 @@ public:
 
 protected:
   /* ========================== custom logic here ========================== */
-  Trigger low_batt, critical_batt;
+  Trigger low_batt, critical_batt, serial;
   TimeSeriesData  battery_data;
 
   void onSensorDataRead() override {
@@ -35,8 +35,42 @@ protected:
     if (strcmp(command, "magic") == 0) {    // example 'custom' command handling
       strcpy(reply, "**Magic now done**");
       return true;   // handled
+    } else if (memcmp(command, "sout ", 5) == 0) {
+      SERIAL_GW.println(&command[5]);
+      return true;
     }
     return false;  // not handled
+  }
+
+public:
+  void loop() {
+    SensorMesh::loop();
+
+#ifdef SERIAL_GW
+    static char in_data[156];
+    static char out_data[160] = "s> ";
+
+    int len = strlen(in_data);
+    while (SERIAL_GW.available() && len < 155) {
+      char c = SERIAL_GW.read();
+      if (c != '\n') {
+        in_data[len++] = c;
+        in_data[len] = 0;
+      }
+    }
+    if (len == 155) {  // buffer full ... send
+      in_data[155] = '\r';
+    }
+
+    if (len > 0 && in_data[len - 1] == '\r') {  // received complete line
+      serial.text[0] = 0; // retrigger serial alert
+      in_data[len - 1] = 0;  // replace newline with C string null terminator
+      strncpy(&out_data[3], in_data, 156);
+      alertIf(true, serial, LOW_PRI_ALERT, out_data);
+
+      in_data[0] = 0;  // reset buffer
+    }
+#endif
   }
   /* ======================================================================= */
 };
@@ -54,6 +88,13 @@ static char command[160];
 
 void setup() {
   Serial.begin(115200);
+
+#ifdef SERIAL_GW
+  SERIAL_GW.setRx(SGW_RX);
+  SERIAL_GW.setTx(SGW_TX);
+  SERIAL_GW.begin(115200);
+#endif
+
   delay(1000);
 
   board.begin();
