@@ -78,6 +78,7 @@ void initVariant()
   pinMode(SENSOR_EN, OUTPUT);
   pinMode(GPS_EN, OUTPUT);
   pinMode(GPS_RESET, OUTPUT);
+  pinMode(GPS_RESETB, INPUT_PULLUP);
   pinMode(GPS_VRTC_EN, OUTPUT);
   pinMode(GPS_SLEEP_INT, OUTPUT);
   pinMode(GPS_RTC_INT, OUTPUT);

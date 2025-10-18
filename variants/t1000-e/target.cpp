@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "t1000e_sensors.h"
 #include "target.h"
-#include <helpers/sensors/MicroNMEALocationProvider.h>
+#include <helpers/sensors/location/MicroNMEAGpsDriver.h>
 
 T1000eBoard board;
 
@@ -10,7 +10,7 @@ RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BU
 WRAPPER_CLASS radio_driver(radio, board);
 
 VolatileRTCClock rtc_clock;
-MicroNMEALocationProvider nmea = MicroNMEALocationProvider(Serial1, &rtc_clock);
+MicroNMEAGpsDriver nmea = MicroNMEAGpsDriver(Serial1);
 T1000SensorManager sensors = T1000SensorManager(nmea);
 
 #ifdef DISPLAY_CLASS
@@ -94,58 +94,11 @@ mesh::LocalIdentity radio_new_identity() {
   return mesh::LocalIdentity(&rng);  // create new random identity
 }
 
-void T1000SensorManager::start_gps() {
-  gps_active = true;
-  //_nmea->begin();
-  // this init sequence should be better 
-  // comes from seeed examples and deals with all gps pins
-  pinMode(GPS_EN, OUTPUT);
-  digitalWrite(GPS_EN, HIGH);
-  delay(10);
-  pinMode(GPS_VRTC_EN, OUTPUT);
-  digitalWrite(GPS_VRTC_EN, HIGH);
-  delay(10);
-       
-  pinMode(GPS_RESET, OUTPUT);
-  digitalWrite(GPS_RESET, HIGH);
-  delay(10);
-  digitalWrite(GPS_RESET, LOW);
-       
-  pinMode(GPS_SLEEP_INT, OUTPUT);
-  digitalWrite(GPS_SLEEP_INT, HIGH);
-  pinMode(GPS_RTC_INT, OUTPUT);
-  digitalWrite(GPS_RTC_INT, LOW);
-  pinMode(GPS_RESETB, INPUT_PULLUP);
-}
-
-void T1000SensorManager::sleep_gps() {
-  gps_active = false;
-  digitalWrite(GPS_VRTC_EN, HIGH);
-  digitalWrite(GPS_EN, LOW);
-  digitalWrite(GPS_RESET, HIGH);
-  digitalWrite(GPS_SLEEP_INT, HIGH);
-  digitalWrite(GPS_RTC_INT, LOW);
-  pinMode(GPS_RESETB, OUTPUT);
-  digitalWrite(GPS_RESETB, LOW);
-  //_nmea->stop();
-}
-
-void T1000SensorManager::stop_gps() {
-  gps_active = false;
-  digitalWrite(GPS_VRTC_EN, LOW);
-  digitalWrite(GPS_EN, LOW);
-  digitalWrite(GPS_RESET, HIGH);
-  digitalWrite(GPS_SLEEP_INT, HIGH);
-  digitalWrite(GPS_RTC_INT, LOW);
-  pinMode(GPS_RESETB, OUTPUT);
-  digitalWrite(GPS_RESETB, LOW);
-  //_nmea->stop();
-}
-
-
 bool T1000SensorManager::begin() {
   // init GPS
   Serial1.begin(115200);
+  digitalWrite(GPS_VRTC_EN, HIGH);
+  location_provider.begin();
   return true;
 }
 
@@ -163,37 +116,42 @@ bool T1000SensorManager::querySensors(uint8_t requester_permissions, CayenneLPP&
 void T1000SensorManager::loop() {
   static long next_gps_update = 0;
 
-  _nmea->loop();
+  location_provider.loop();
 
-  if (millis() > next_gps_update) {
-    if (gps_active && _nmea->isValid()) {
-      node_lat = ((double)_nmea->getLatitude())/1000000.;
-      node_lon = ((double)_nmea->getLongitude())/1000000.;
-      node_altitude = ((double)_nmea->getAltitude()) / 1000.0;
-      //Serial.printf("lat %f lon %f\r\n", _lat, _lon);
-    }
-    next_gps_update = millis() + 1000;
-  }
+  node_lat = location_provider.node_lat;
+  node_lon = location_provider.node_lon;
+  node_altitude = location_provider.node_altitude;
 }
 
-int T1000SensorManager::getNumSettings() const { return 1; }  // just one supported: "gps" (power switch)
+int T1000SensorManager::getNumSettings() const { 
+  int settings = 0;
+  if (location_provider.isDetected()) settings++;  // only show GPS setting if GPS is detected
+  return settings;
+}
 
 const char* T1000SensorManager::getSettingName(int i) const {
-  return i == 0 ? "gps" : NULL;
-}
-const char* T1000SensorManager::getSettingValue(int i) const {
-  if (i == 0) {
-    return gps_active ? "1" : "0";
+  int settings = 0;
+  if (location_provider.isDetected() && i == settings++) {
+    return "gps";
   }
   return NULL;
 }
-bool T1000SensorManager::setSettingValue(const char* name, const char* value) {
-  if (strcmp(name, "gps") == 0) {
-    if (strcmp(value, "0") == 0) {
-      sleep_gps(); // sleep for faster fix !
-    } else {
-      start_gps();
+
+const char* T1000SensorManager::getSettingValue(int i) const {
+  int settings = 0;
+    if (location_provider.isDetected() && i == settings++) {
+      return location_provider.isEnabled() ? "1" : "0";
     }
+  return NULL;
+}
+
+bool T1000SensorManager::setSettingValue(const char* name, const char* value) {
+  if (location_provider.isDetected() && strcmp(name, "gps") == 0) {
+    location_provider.setEnabled(strcmp(value, "0") != 0);
+    return true;
+  }
+  if (location_provider.isDetected() && strcmp(name, "gps_interval") == 0) {
+    location_provider.setCycleInterval(atoi(value));
     return true;
   }
   return false;  // not supported

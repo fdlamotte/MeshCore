@@ -108,9 +108,12 @@
 #define HAS_GPS                 1
 #define GPS_RX_PIN              PIN_SERIAL1_RX
 #define GPS_TX_PIN              PIN_SERIAL1_TX
+#define PIN_GPS_RX              PIN_SERIAL1_RX
+#define PIN_GPS_TX              PIN_SERIAL1_TX
 
 #define GPS_EN                  (43)            // P1.11
 #define GPS_RESET               (47)            // P1.15
+#define PIN_GPS_RESET_ACTIVE    HIGH
 
 #define GPS_VRTC_EN             (8)             // P0.8
 #define GPS_SLEEP_INT           (44)            // P1.12

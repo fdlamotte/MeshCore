@@ -1,7 +1,7 @@
 #include "LocationProvider.h"
 #include <Arduino.h>
 
-#include "UbloxI2CGpsDriver.h"
+//#include "UbloxI2CGpsDriver.h"
 #include "MicroNMEAGpsDriver.h"
 
 const long LOOP_THROTTLE_MS = 1000;
@@ -9,14 +9,14 @@ const long LOOP_THROTTLE_MS = 1000;
 GpsDriver* LocationProvider::detectDriver() {
   GpsDriver* driver = nullptr;
 
-  // Try u-blox I2C GPS first
-  MESH_DEBUG_PRINTLN("Trying u-blox I2C GPS...");
-  driver = new UbloxI2CGpsDriver();
-  if (driver->init()) {
-    MESH_DEBUG_PRINTLN("u-blox I2C GPS initialized");
-    return driver;
-  }
-  delete driver;
+  // // Try u-blox I2C GPS first
+  // MESH_DEBUG_PRINTLN("Trying u-blox I2C GPS...");
+  // driver = new UbloxI2CGpsDriver();
+  // if (driver->init()) {
+  //   MESH_DEBUG_PRINTLN("u-blox I2C GPS initialized");
+  //   return driver;
+  // }
+  // delete driver;
 
   // Try serial NMEA GPS
   MESH_DEBUG_PRINTLN("Trying NMEA GPS...");
@@ -74,9 +74,6 @@ bool LocationProvider::hasValidFix() const {
 bool LocationProvider::updateLocation() {
   if (!_hardware_on) return false;
 
-  // Sync latest data from GPS hardware
-  _driver->sync();
-
   // Get raw data from provider
   long lat = _driver->getLatitude();
   long lon = _driver->getLongitude();
@@ -115,6 +112,9 @@ void LocationProvider::syncTime() {
 }
 
 void LocationProvider::loop() {
+  // Sync latest data from GPS hardware
+  _driver->sync();
+
   // Throttle loop to run at most once per second
   long now = millis();
   if (now - _last_loop_run < LOOP_THROTTLE_MS) {
@@ -132,6 +132,7 @@ void LocationProvider::loop() {
     }
     return;
   }
+
 
   #ifdef FORCE_GPS_ALIVE
     if (!_hardware_on) {
