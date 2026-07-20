@@ -34,7 +34,6 @@ void setup() {
   board.begin();
   customSPI.begin(P_LORA_SCLK, P_LORA_MISO, P_LORA_MOSI, P_LORA_NSS);
 
-  enterLR1110Bootloader();
   digitalWrite(18, LOW);
 
   delay(5000);
@@ -55,6 +54,8 @@ void setup() {
   // prompt the user
   Serial.println(F("[LR1110] Send any character to start the update"));
   while(!Serial.available()) { delay(1); }
+
+  enterLR1110Bootloader();
 
   // upload update into LR11x0 non-volatile memory
   Serial.print(F("[LR1110] Updating firmware, this may take several seconds ... "));
@@ -106,16 +107,16 @@ int lr_setup() {
 
   delay(10);
 
-  state = radio.standby();
-  RADIOLIB_ASSERT(state);
+  // state = radio.standby();
+  // RADIOLIB_ASSERT(state);
 
-  if(tcxo > 0.0f) {
-    state = radio.setTCXO(tcxo);
-    RADIOLIB_ASSERT(state);
-  }
+  // if(tcxo > 0.0f) {
+  //   state = radio.setTCXO(tcxo);
+  //   RADIOLIB_ASSERT(state);
+  // }
 
-  state = radio.config(RADIOLIB_LR11X0_PACKET_TYPE_LORA);
-  RADIOLIB_ASSERT(state);
+  // state = radio.config(RADIOLIB_LR11X0_PACKET_TYPE_LORA);
+  // RADIOLIB_ASSERT(state);
 
   return state;
 }
@@ -161,7 +162,7 @@ void printVersions() {
 
   uint8_t hardware, device, fwMajor, fwMinor;
 
-  radio.reset();
+//  radio.reset();
   int16_t state = radio.getVersion(&hardware, &device, &fwMajor, &fwMinor);
   
   if (state == RADIOLIB_ERR_NONE) {
