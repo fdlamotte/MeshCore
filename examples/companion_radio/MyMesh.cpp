@@ -62,6 +62,7 @@
 #define CMD_SET_DEFAULT_FLOOD_SCOPE   63
 #define CMD_GET_DEFAULT_FLOOD_SCOPE   64
 #define CMD_SEND_RAW_PACKET           65
+#define CMD_RUN_CLI_COMMAND           66  // v14+
 
 // Stats sub-types for CMD_GET_STATS
 #define STATS_TYPE_CORE               0
@@ -97,6 +98,7 @@
 #define RESP_ALLOWED_REPEAT_FREQ      26
 #define RESP_CODE_CHANNEL_DATA_RECV   27
 #define RESP_CODE_DEFAULT_FLOOD_SCOPE 28
+#define RESP_CODE_CLI_REPLY           29  // v14+, a reply to CMD_RUN_CLI_COMMAND
 
 #define MAX_CHANNEL_DATA_LENGTH       (MAX_FRAME_SIZE - 9)
 
@@ -529,9 +531,13 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
 }
 
 void MyMesh::onCommandDataRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
-                               const char *text) {
+                               const char *text, char* reply) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
-  queueMessage(from, TXT_TYPE_CLI_DATA, pkt, sender_timestamp, NULL, 0, text);
+  if (from.isRemoteCLIAllowed() && handleCommand(text, sender_timestamp, reply)) {
+    // CLI command was handled.  Let BaseChatMesh handle the sending of the reply
+  } else {
+    queueMessage(from, TXT_TYPE_CLI_DATA, pkt, sender_timestamp, NULL, 0, text);
+  }
 }
 
 void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
@@ -1082,6 +1088,21 @@ void MyMesh::handleCmdFrame(size_t len) {
     memcpy(&out_frame[i], _prefs.node_name, tlen);
     i += tlen;
     _serial->writeFrame(out_frame, i);
+  } else if (cmd_frame[0] == CMD_RUN_CLI_COMMAND && len >= 3) { // V14+
+    int i = 1;
+    char *text = (char *)&cmd_frame[i];
+    int tlen = len - i;
+    text[tlen] = 0; // ensure null
+
+    reply_buf[0] = 0;
+    if (handleCommand(text, 0, reply_buf)) {
+      out_frame[0] = RESP_CODE_CLI_REPLY;
+      int rlen = strlen(reply_buf);
+      memcpy(&out_frame[1], reply_buf, rlen);
+      _serial->writeFrame(out_frame, 1 + rlen);
+    } else {
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);  // unsupported command
+    }
   } else if (cmd_frame[0] == CMD_SEND_TXT_MSG && len >= 14) {
     int i = 1;
     uint8_t txt_type = cmd_frame[i++];
@@ -2031,6 +2052,25 @@ void MyMesh::enterCLIRescue() {
   Serial.println("========= CLI Rescue =========");
 }
 
+bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char* reply) {
+  while (*command == ' ') command++; // skip leading spaces
+
+  if (strlen(command) > 4 && command[2] == '|') { // optional prefix (for companion radio CLI)
+    memcpy(reply, command, 3);                    // reflect the prefix back
+    reply += 3;
+    *reply = 0;
+    command += 3;
+  }
+
+  if (memcmp(command, "set pin ", 8) == 0) {
+    _prefs.ble_pin = atoi(&command[8]);
+    savePrefs();
+    sprintf(reply, "> pin is now %06d", _prefs.ble_pin);
+    return true;
+  }
+  return false;  // not handled
+}
+
 void MyMesh::checkCLIRescueCmd() {
   int len = strlen(cli_command);
   while (Serial.available() && len < sizeof(cli_command)-1) {
@@ -2048,15 +2088,10 @@ void MyMesh::checkCLIRescueCmd() {
   if (len > 0 && cli_command[len - 1] == '\r') {  // received complete line
     cli_command[len - 1] = 0;  // replace newline with C string null terminator
 
-    if (memcmp(cli_command, "set ", 4) == 0) {
-      const char* config = &cli_command[4];
-      if (memcmp(config, "pin ", 4) == 0) {
-        _prefs.ble_pin = atoi(&config[4]);
-        savePrefs();
-        Serial.printf("  > pin is now %06d\n", _prefs.ble_pin);
-      } else {
-        Serial.printf("  Error: unknown config: %s\n", config);
-      }
+    reply_buf[0] = 0;
+    if (handleCommand(cli_command, 0, reply_buf)) {
+      // command was handled, print reply output
+      Serial.print("  "); Serial.print(reply_buf); Serial.println();
     } else if (strcmp(cli_command, "rebuild") == 0) {
       bool success = _store->formatFileSystem();
       if (success) {
