@@ -84,6 +84,14 @@ struct AdvertPath {
   uint8_t path[MAX_PATH_SIZE];
 };
 
+struct DiscoveredNode {
+  uint8_t pubkey_prefix[9];
+  float snr_in;
+  float snr_out;
+  char name[32];
+  uint8_t type;
+};
+
 class MyMesh : public BaseChatMesh, public DataStoreHost {
 public:
   MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMeshTables &tables, DataStore& store, AbstractUITask* ui=NULL);
@@ -101,6 +109,9 @@ public:
   void enterCLIRescue();
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
+
+  bool requestRepeatersDiscovery();
+  int getDiscoveredNodes(DiscoveredNode nodes[], int max_num);
 
 protected:
   float getAirtimeBudgetFactor() const override;
@@ -256,6 +267,13 @@ private:
 
   #define ADVERT_PATH_TABLE_SIZE   16
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
+
+  #define DISCOVERED_NODES_TABLE_SIZE 10
+  DiscoveredNode discovered_nodes[DISCOVERED_NODES_TABLE_SIZE]; // not circular, latest discovered nodes are not kept
+  uint32_t disc_node_req_tag = 0;
+  uint32_t disc_nodes_count = 0;
+
+  void checkControlDataForPendingDiscovery(uint8_t payload[], size_t p_len);
 };
 
 extern MyMesh the_mesh;
