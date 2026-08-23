@@ -139,7 +139,7 @@ void T096Board::attachDynamicPrefs(KeyValueStore* prefs) {
   _prefs = prefs;
 
   char radio_fem_rxgain[8] = { 0 };
-  _prefs->getByKey("radio.fem_rxgain", radio_fem_rxgain, 7);  // get initial values
+  _prefs->getByKey("fem_rxgain", radio_fem_rxgain, 7);  // get initial values
 
   setLoRaFemLnaEnabled(strcmp(radio_fem_rxgain, "1") == 0);
 }
@@ -158,14 +158,14 @@ bool T096Board::handleCommand(const char* command, uint32_t sender_timestamp, ch
       strcpy(reply, "Error: unsupported");
     } else if (memcmp(&command[21], "on", 2) == 0) {
       if (setLoRaFemLnaEnabled(true)) {
-        _prefs->setByKey("radio.fem_rxgain", "1");
+        _prefs->setByKey("fem_rxgain", "1");
         strcpy(reply, "OK - LoRa FEM RX gain on");
       } else {
         strcpy(reply, "Error: failed to apply LoRa FEM RX gain");
       }
     } else if (memcmp(&command[21], "off", 3) == 0) {
       if (setLoRaFemLnaEnabled(false)) {
-        _prefs->setByKey("radio.fem_rxgain", "0");
+        _prefs->setByKey("fem_rxgain", "0");
         strcpy(reply, "OK - LoRa FEM RX gain off");
       } else {
         strcpy(reply, "Error: failed to apply LoRa FEM RX gain");

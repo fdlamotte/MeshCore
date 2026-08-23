@@ -26,12 +26,11 @@ public:
   T096Board() :periph_power(PIN_VEXT_EN,PIN_VEXT_EN_ACTIVE), NRF52Board("T096_OTA") {}
   void begin();
   void attachDynamicPrefs(KeyValueStore* prefs);
+  bool handleCommand(const char* command, uint32_t sender_timestamp, char* reply) override;
 
   void onBeforeTransmit(void) override;
   void onAfterTransmit(void) override;
   uint16_t getBattMilliVolts() override;
   const char* getManufacturerName() const override ;
   void powerOff() override;
-
-  bool handleCommand(const char* command, uint32_t sender_timestamp, char* reply) override;
 };
