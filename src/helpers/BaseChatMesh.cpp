@@ -256,13 +256,17 @@ void BaseChatMesh::onPeerDataRecv(mesh::Packet* packet, uint8_t type, int sender
         sendAckTo(from, ack_hash, 6);
       }
     } else if (flags == TXT_TYPE_CLI_DATA) {
+      char *text = (char *)&data[5];
+      onCommandDataRecv(from, packet, sender_timestamp, text);  // let UI know
+      // NOTE: no ack expected for CLI_DATA replies
+    } else if (flags == TXT_TYPE_CLI_COMMAND) {
       uint8_t temp[166];
       char *command = (char *)&data[5];
       char *reply = (char *)&temp[5];
       *reply = 0;
 
-      onCommandDataRecv(from, packet, sender_timestamp, command, reply);  // let UI know
-      // NOTE: no ack expected for CLI_DATA replies
+      onCLICommandRecv(from, packet, sender_timestamp, command, reply);  // let UI know
+      // NOTE: no ack expected for CLI_COMMAND replies
 
       int text_len = strlen(reply);
       if (text_len > 0) {
