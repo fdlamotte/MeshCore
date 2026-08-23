@@ -489,13 +489,13 @@ int  BaseChatMesh::sendMessage(const ContactInfo& recipient, uint32_t timestamp,
   return rc;
 }
 
-int  BaseChatMesh::sendCommandData(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text, uint32_t& est_timeout) {
+int  BaseChatMesh::sendCommandData(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, uint8_t txt_type, const char* text, uint32_t& est_timeout) {
   int text_len = strlen(text);
   if (text_len > MAX_TEXT_LEN) return MSG_SEND_FAILED;
 
   uint8_t temp[5+MAX_TEXT_LEN+1];
   memcpy(temp, &timestamp, 4);   // mostly an extra blob to help make packet_hash unique
-  temp[4] = (attempt & 3) | (TXT_TYPE_CLI_DATA << 2);
+  temp[4] = (attempt & 3) | (txt_type << 2);
   memcpy(&temp[5], text, text_len + 1);
 
   auto pkt = createDatagram(PAYLOAD_TYPE_TXT_MSG, recipient.id, recipient.getSharedSecret(self_id), temp, 5 + text_len);
