@@ -128,6 +128,10 @@ private:
     void setFloodTxDelay(float d) override { _parent->tx_delay_factor = d; markDirty(); }
     float getDirectTxDelay() const override { return _parent->direct_tx_delay_factor; }
     void setDirectTxDelay(float d) override { _parent->direct_tx_delay_factor = d; markDirty(); }
+    uint8_t getFEMRxGain() const override { return _parent->radio_fem_rxgain; }
+    void setFEMRxGain(uint8_t g) override { _parent->radio_fem_rxgain = g; markDirty(); }
+    uint8_t getFEMTxGain() const override { return _parent->radio_fem_txgain; }
+    void setFEMTxGain(uint8_t g) override { _parent->radio_fem_txgain = g; markDirty(); }
   };
   RadioPrefs radio;
 
@@ -226,7 +230,8 @@ public:
   }
 
   CommonRadioPrefs* getRadioPrefs() { return &radio; }
-  void clearDirty() { radio.clearDirty(); }
+  bool isDirty() const override { return ConfigSerializer::isDirty() || radio.isDirty(); }
+  void clearDirty() override { ConfigSerializer::clearDirty(); radio.clearDirty(); }
 };
 
 class CommonCLICallbacks {

@@ -185,6 +185,11 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
       if (_prefs->getRadioPrefs()->isDirty()) { savePrefs(); }
       return;
     }
+    // hook for variant-specific CLI processing
+    if (_board->handleCommand(command, sender_timestamp, reply)) {
+      if (_prefs->isDirty()) { savePrefs(); }
+      return;
+    }
 
     if (memcmp(command, "poweroff", 8) == 0 || memcmp(command, "shutdown", 8) == 0) {
       _board->powerOff();  // doesn't return
@@ -507,50 +512,6 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
     _prefs->disable_fwd = memcmp(&config[7], "off", 3) == 0;
     savePrefs();
     strcpy(reply, _prefs->disable_fwd ? "OK - repeat is now OFF" : "OK - repeat is now ON");
-  } else if (memcmp(config, "radio.fem.rxgain ", 17) == 0) {
-    if (!_board->canControlLoRaFemLna()) {
-      strcpy(reply, "Error: unsupported");
-    } else if (memcmp(&config[17], "on", 2) == 0) {
-      if (_board->setLoRaFemLnaEnabled(true)) {
-        _prefs->radio_fem_rxgain = 1;
-        savePrefs();
-        strcpy(reply, "OK - LoRa FEM RX gain on");
-      } else {
-        strcpy(reply, "Error: failed to apply LoRa FEM RX gain");
-      }
-    } else if (memcmp(&config[17], "off", 3) == 0) {
-      if (_board->setLoRaFemLnaEnabled(false)) {
-        _prefs->radio_fem_rxgain = 0;
-        savePrefs();
-        strcpy(reply, "OK - LoRa FEM RX gain off");
-      } else {
-        strcpy(reply, "Error: failed to apply LoRa FEM RX gain");
-      }
-    } else {
-      strcpy(reply, "Error: state must be on or off");
-    }
-  } else if (memcmp(config, "radio.fem.txgain ", 17) == 0) {
-    if (!_board->canControlLoRaFemPaGain()) {
-      strcpy(reply, "Error: unsupported");
-    } else if (memcmp(&config[17], "on", 2) == 0) {
-      if (_board->setLoRaFemPaGainEnabled(true)) {
-        _prefs->radio_fem_txgain = 1;
-        savePrefs();
-        strcpy(reply, "OK - LoRa FEM TX gain on");
-      } else {
-        strcpy(reply, "Error: failed to apply LoRa FEM TX gain");
-      }
-    } else if (memcmp(&config[17], "off", 3) == 0) {
-      if (_board->setLoRaFemPaGainEnabled(false)) {
-        _prefs->radio_fem_txgain = 0;
-        savePrefs();
-        strcpy(reply, "OK - LoRa FEM TX gain off");
-      } else {
-        strcpy(reply, "Error: failed to apply LoRa FEM TX gain");
-      }
-    } else {
-      strcpy(reply, "Error: state must be on or off");
-    }
   } else if (memcmp(config, "lat ", 4) == 0) {
     _prefs->node_lat = atof(&config[4]);
     savePrefs();
@@ -733,18 +694,6 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
     sprintf(reply, "> %s", StrHelper::ftoa(_prefs->node_lat));
   } else if (memcmp(config, "lon", 3) == 0) {
     sprintf(reply, "> %s", StrHelper::ftoa(_prefs->node_lon));
-  } else if (memcmp(config, "radio.fem.rxgain", 16) == 0) {
-    if (!_board->canControlLoRaFemLna()) {
-      strcpy(reply, "Error: unsupported");
-    } else {
-      sprintf(reply, "> %s", _board->isLoRaFemLnaEnabled() ? "on" : "off");
-    }
-  } else if (memcmp(config, "radio.fem.txgain", 16) == 0) {
-    if (!_board->canControlLoRaFemPaGain()) {
-      strcpy(reply, "Error: unsupported");
-    } else {
-      sprintf(reply, "> %s", _board->isLoRaFemPaGainEnabled() ? "on" : "off");
-    }
   } else if (memcmp(config, "flood.max.advert", 16) == 0) {
     sprintf(reply, "> %d", (uint32_t)_prefs->flood_max_advert);
   } else if (memcmp(config, "flood.max.unscoped", 18) == 0) {

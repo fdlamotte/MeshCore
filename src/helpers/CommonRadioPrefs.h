@@ -1,6 +1,8 @@
+#pragma once
 #include "ConfigSerializer.h"
+#include "KeyValueStore.h"
 
-class CommonRadioPrefs : public ConfigSerializer {
+class CommonRadioPrefs : public ConfigSerializer, public KeyValueStore{
   bool _is_dirty = false;
 protected:
   CommonRadioPrefs() { }
@@ -54,5 +56,14 @@ public:
   virtual float getDirectTxDelay() const = 0;
   virtual void setDirectTxDelay(float d) = 0;
 
+  virtual uint8_t getFEMRxGain() const = 0;
+  virtual void setFEMRxGain(uint8_t g) = 0;
+
+  virtual uint8_t getFEMTxGain() const = 0;
+  virtual void setFEMTxGain(uint8_t g) = 0;
+
   bool handleCommand(const char* command, uint32_t sender_timestamp, char* reply);
+
+  void setByKey(const char* key, const char* value) override;   // for dynamic key/value access
+  void getByKey(const char* key, char* value, size_t max_len) override;
 };

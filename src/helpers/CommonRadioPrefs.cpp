@@ -3,6 +3,27 @@
 #include "Utils.h"
 #include "target.h"
 
+void CommonRadioPrefs::getByKey(const char* key, char* value, size_t max_len) {
+  if (strcmp(key, "fem_rxgain") == 0) {
+    snprintf(value, max_len, "%d", (uint32_t)getFEMRxGain());
+  } else if (strcmp(key, "fem_txgain") == 0) {
+    snprintf(value, max_len, "%d", (uint32_t)getFEMTxGain());
+  } else {
+    MESH_DEBUG_PRINTLN("Error: getBykey() unknown key: %s", key);
+  }
+}
+void CommonRadioPrefs::setByKey(const char* key, const char* value) {
+  if (strcmp(key, "fem_rxgain") == 0) {
+    setFEMRxGain(atoi(value));
+    markDirty();
+  } else if (strcmp(key, "fem_txgain") == 0) {
+    setFEMTxGain(atoi(value));
+    markDirty();
+  } else {
+    MESH_DEBUG_PRINTLN("Error: setBykey() unknown key: %s", key);
+  }
+}
+
 bool CommonRadioPrefs::handleCommand(const char* command, uint32_t sender_timestamp, char* reply) {
   if (strcmp(command, "get radio") == 0) {
     char freq[16], bw[16];

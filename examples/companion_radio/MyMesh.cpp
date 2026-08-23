@@ -989,8 +989,9 @@ void MyMesh::begin(bool has_display) {
   radio_driver.setParams(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
   radio_driver.setTxPower(_prefs.tx_power_dbm);
   radio_driver.setRxBoostedGainMode(_prefs.rx_boosted_gain);
-  board.setLoRaFemLnaEnabled(_prefs.radio_fem_rxgain);
-  board.setLoRaFemPaGainEnabled(_prefs.radio_fem_txgain);
+
+  board.attachDynamicPrefs(_prefs.getRadioPrefs());
+
   MESH_DEBUG_PRINTLN("RX Boosted Gain Mode: %s",
                      radio_driver.getRxBoostedGainMode() ? "Enabled" : "Disabled");
 }
@@ -2070,6 +2071,12 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
 
   if (_prefs.getRadioPrefs()->handleCommand(command, sender_timestamp, reply)) {  // is radio CLI command?
     if (_prefs.getRadioPrefs()->isDirty()) { savePrefs(); }
+    return true;
+  }
+
+  // hook for variant-specific CLI processing
+  if (board.handleCommand(command, sender_timestamp, reply)) {
+    if (_prefs.isDirty()) { savePrefs(); }
     return true;
   }
 

@@ -54,12 +54,8 @@ private:
       //def("cad", _parent->cad_enabled);
       //def("int_thr", _parent->interference_threshold);
       def("rxgain", _parent->rx_boosted_gain);
-    #if 0
-      // NOTE: these cannot be set (yet) so don't load/save until we can.
-      //       also, fem_rxgain WAS mapped to wrong JSON property previously
-      def("fem_rxgain", _parent->radio_fem_rxgain);
+      def("fem_rxgain", _parent->radio_fem_rxgain);   // fem_rxgain WAS mapped to wrong JSON property previously
       def("fem_txgain", _parent->radio_fem_txgain);
-    #endif
       def("tx", _parent->tx_power_dbm);
       def("af", _parent->airtime_factor);
       def("rxdelay", _parent->rx_delay_base);
@@ -103,6 +99,10 @@ private:
     void setFloodTxDelay(float d) override { /* no-op */ }
     float getDirectTxDelay() const override { return 0.2f; }  //   currently hard-coded
     void setDirectTxDelay(float d) override { /* no-op */ }
+    uint8_t getFEMRxGain() const override { return _parent->radio_fem_rxgain; }
+    void setFEMRxGain(uint8_t g) override { _parent->radio_fem_rxgain = g; markDirty(); }
+    uint8_t getFEMTxGain() const override { return _parent->radio_fem_txgain; }
+    void setFEMTxGain(uint8_t g) override { _parent->radio_fem_txgain = g; markDirty(); }
   };
   RadioPrefs radio;
 
@@ -177,5 +177,6 @@ public:
   void setRepeatEn(bool en) { repeat.disable_fwd = en ? 0 : 1; }
 
   CommonRadioPrefs* getRadioPrefs() { return &radio; }
-  void clearDirty() { radio.clearDirty(); }
+  bool isDirty() const override { return ConfigSerializer::isDirty() || radio.isDirty(); }
+  void clearDirty() override { ConfigSerializer::clearDirty(); radio.clearDirty(); }
 };
