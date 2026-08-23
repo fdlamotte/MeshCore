@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint> // For uint8_t, uint32_t
 #include <helpers/ConfigSerializer.h>
+#include <helpers/CommonRadioPrefs.h>
 
 #define TELEM_MODE_DENY            0
 #define TELEM_MODE_ALLOW_FLAGS     1     // use contact.flags
@@ -42,7 +43,7 @@ public:
   uint8_t default_scope_key[16];
 
 private:
-  class RadioPrefs : public ConfigSerializer {  // COPIED from CommonCLI (for now)
+  class RadioPrefs : public CommonRadioPrefs {
     NodePrefs* _parent;
   protected:
     void structure() override {
@@ -70,6 +71,18 @@ private:
     }
   public:
     RadioPrefs(NodePrefs* parent) : _parent(parent) { }
+
+    // CommonRadioPrefs interface
+    float getFreq() const override { return _parent->freq; }
+    void setFreq(float f) override { _parent->freq = f; markDirty(); }
+    float getBandwidth() const override { return _parent->bw; }
+    void setBandwidth(float bw) override { _parent->bw = bw; markDirty(); }
+    uint8_t getSpreadFactor() const override { return _parent->sf; }
+    void setSpreadFactor(uint8_t sf) { _parent->sf; markDirty(); }
+    uint8_t getCodingRate() const override { return _parent->cr; }
+    void setCodingRate(uint8_t cr) { _parent->cr = cr; markDirty(); }
+    float getAirtimeFactor() const override { return _parent->airtime_factor; }
+    void setAirtimeFactor(float af) override { _parent->airtime_factor = af; markDirty(); }
   };
   RadioPrefs radio;
 
@@ -142,4 +155,7 @@ public:
   // new accessor methods
   bool isRepeatEn() const { return repeat.disable_fwd == 0; }
   void setRepeatEn(bool en) { repeat.disable_fwd = en ? 0 : 1; }
+
+  CommonRadioPrefs* getRadioPrefs() { return &radio; }
+  void clearDirty() { radio.clearDirty(); }
 };

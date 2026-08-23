@@ -164,6 +164,7 @@ void CommonCLI::savePrefs() {
     _prefs->advert_interval = 0;  // turn it off, now that device has been manually configured
   }
   _callbacks->savePrefs();
+  _prefs->clearDirty();
 }
 
 uint8_t CommonCLI::buildAdvertData(uint8_t node_type, uint8_t* app_data) {
@@ -180,6 +181,11 @@ uint8_t CommonCLI::buildAdvertData(uint8_t node_type, uint8_t* app_data) {
 }
 
 void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* reply) {
+    if (_prefs->getRadioPrefs()->handleCommand(command, sender_timestamp, reply)) {   // is a radio CLI command?
+      if (_prefs->getRadioPrefs()->isDirty()) { savePrefs(); }
+      return;
+    }
+
     if (memcmp(command, "poweroff", 8) == 0 || memcmp(command, "shutdown", 8) == 0) {
       _board->powerOff();  // doesn't return
     } else if (memcmp(command, "reboot", 6) == 0) {
@@ -447,19 +453,8 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
 
 void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* reply) {
   const char* config = &command[4];
-  if (memcmp(config, "dutycycle ", 10) == 0) {
-    float dc = atof(&config[10]);
-    if (dc < 1 || dc > 100) {
-      strcpy(reply, "ERROR: dutycycle must be 1-100");
-    } else {
-      _prefs->airtime_factor = (100.0f / dc) - 1.0f;
-      savePrefs();
-      float actual = 100.0f / (_prefs->airtime_factor + 1.0f);
-      int a_int = (int)actual;
-      int a_frac = (int)((actual - a_int) * 10.0f + 0.5f);
-      sprintf(reply, "OK - %d.%d%%", a_int, a_frac);
-    }
-  } else if (memcmp(config, "af ", 3) == 0) {
+
+  if (memcmp(config, "af ", 3) == 0) {
     _prefs->airtime_factor = atof(&config[3]);
     savePrefs();
     strcpy(reply, "OK");
@@ -584,24 +579,6 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
       }
     } else {
       strcpy(reply, "Error: state must be on or off");
-    }
-  } else if (memcmp(config, "radio ", 6) == 0) {
-    strcpy(tmp, &config[6]);
-    const char *parts[4];
-    int num = mesh::Utils::parseTextParts(tmp, parts, 4);
-    float freq  = num > 0 ? strtof(parts[0], nullptr) : 0.0f;
-    float bw    = num > 1 ? strtof(parts[1], nullptr) : 0.0f;
-    uint8_t sf  = num > 2 ? atoi(parts[2]) : 0;
-    uint8_t cr  = num > 3 ? atoi(parts[3]) : 0;
-    if (freq >= 150.0f && freq <= 2500.0f && sf >= 5 && sf <= 12 && cr >= 5 && cr <= 8 && bw >= 7.0f && bw <= 500.0f) {
-      _prefs->sf = sf;
-      _prefs->cr = cr;
-      _prefs->freq = freq;
-      _prefs->bw = bw;
-      _callbacks->savePrefs();
-      strcpy(reply, "OK - reboot to apply");
-    } else {
-      strcpy(reply, "Error, invalid radio params");
     }
   } else if (memcmp(config, "lat ", 4) == 0) {
     _prefs->node_lat = atof(&config[4]);
@@ -806,12 +783,7 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
 
 void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* reply) {
   const char* config = &command[4];
-  if (memcmp(config, "dutycycle", 9) == 0) {
-    float dc = 100.0f / (_prefs->airtime_factor + 1.0f);
-    int dc_int = (int)dc;
-    int dc_frac = (int)((dc - dc_int) * 10.0f + 0.5f);
-    sprintf(reply, "> %d.%d%%", dc_int, dc_frac);
-  } else if (memcmp(config, "af", 2) == 0) {
+  if (memcmp(config, "af", 2) == 0) {
     sprintf(reply, "> %s", StrHelper::ftoa(_prefs->airtime_factor));
   } else if (memcmp(config, "int.thresh", 10) == 0) {
     sprintf(reply, "> %d", (uint32_t) _prefs->interference_threshold);
@@ -856,11 +828,6 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
     } else {
       sprintf(reply, "> %s", _board->isLoRaFemPaGainEnabled() ? "on" : "off");
     }
-  } else if (memcmp(config, "radio", 5) == 0) {
-    char freq[16], bw[16];
-    strcpy(freq, StrHelper::ftoa(_prefs->freq));
-    strcpy(bw, StrHelper::ftoa3(_prefs->bw));
-    sprintf(reply, "> %s,%s,%d,%d", freq, bw, (uint32_t)_prefs->sf, (uint32_t)_prefs->cr);
   } else if (memcmp(config, "rxdelay", 7) == 0) {
     sprintf(reply, "> %s", StrHelper::ftoa(_prefs->rx_delay_base));
   } else if (memcmp(config, "txdelay", 7) == 0) {

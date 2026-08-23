@@ -6,6 +6,7 @@
 #include <helpers/ClientACL.h>
 #include <helpers/RegionMap.h>
 #include <helpers/ConfigSerializer.h>
+#include <helpers/CommonRadioPrefs.h>
 
 #if defined(WITH_RS232_BRIDGE) || defined(WITH_ESPNOW_BRIDGE)
 #define WITH_BRIDGE
@@ -72,7 +73,7 @@ public:
   uint8_t extra_sf[4];
 
 private:
-  class RadioPrefs : public ConfigSerializer {
+  class RadioPrefs : public CommonRadioPrefs {
     NodePrefs* _parent;
   protected:
     void structure() override {
@@ -96,6 +97,17 @@ private:
     }
   public:
     RadioPrefs(NodePrefs* parent) : _parent(parent) { }
+    // CommonRadioPrefs interface
+    float getFreq() const override { return _parent->freq; }
+    void setFreq(float f) override { _parent->freq = f; markDirty(); }
+    float getBandwidth() const override { return _parent->bw; }
+    void setBandwidth(float bw) override { _parent->bw = bw; markDirty(); }
+    uint8_t getSpreadFactor() const override { return _parent->sf; }
+    void setSpreadFactor(uint8_t sf) { _parent->sf; markDirty(); }
+    uint8_t getCodingRate() const override { return _parent->cr; }
+    void setCodingRate(uint8_t cr) { _parent->cr = cr; markDirty(); }
+    float getAirtimeFactor() const override { return _parent->airtime_factor; }
+    void setAirtimeFactor(float af) override { _parent->airtime_factor = af; markDirty(); }
   };
   RadioPrefs radio;
 
@@ -192,6 +204,9 @@ public:
     bridge_secret[0] = 0;
     owner_info[0] = 0;
   }
+
+  CommonRadioPrefs* getRadioPrefs() { return &radio; }
+  void clearDirty() { radio.clearDirty(); }
 };
 
 class CommonCLICallbacks {

@@ -2062,12 +2062,38 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     command += 3;
   }
 
+  if (_prefs.getRadioPrefs()->handleCommand(command, sender_timestamp, reply)) {  // is radio CLI command?
+    if (_prefs.getRadioPrefs()->isDirty()) { savePrefs(); }
+    return true;
+  }
+
+  if (memcmp(command, "set name ", 9) == 0) {
+    if (AdvertDataParser::isValidName(&command[9])) {
+      StrHelper::strncpy(_prefs.node_name, &command[9], sizeof(_prefs.node_name));
+      savePrefs();
+      strcpy(reply, "OK");
+    } else {
+      strcpy(reply, "Error, bad chars");
+    }
+    return true;
+  }
+  if (strcmp(command, "get name") == 0) {
+    sprintf(reply, "> %s", _prefs.node_name);
+    return true;
+  }
+
   if (memcmp(command, "set pin ", 8) == 0) {
     _prefs.ble_pin = atoi(&command[8]);
     savePrefs();
     sprintf(reply, "> pin is now %06d", _prefs.ble_pin);
     return true;
   }
+
+  if (strcmp(command, "ver") == 0) {
+    sprintf(reply, "%s (Build: %s)", FIRMWARE_VERSION, FIRMWARE_BUILD_DATE);
+    return true;
+  }
+
   return false;  // not handled
 }
 
