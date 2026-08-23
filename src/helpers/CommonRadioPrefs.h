@@ -24,22 +24,35 @@ public:
   virtual float getAirtimeFactor() const = 0;
   virtual void setAirtimeFactor(float af) = 0;
 
-    //   //def("cad", _parent->cad_enabled);
-    //   //def("int_thr", _parent->interference_threshold);
-    //   def("rxgain", _parent->rx_boosted_gain);
-    // #if 0
-    //   // NOTE: these cannot be set (yet) so don't load/save until we can.
-    //   //       also, fem_rxgain WAS mapped to wrong JSON property previously
-    //   def("fem_rxgain", _parent->radio_fem_rxgain);
-    //   def("fem_txgain", _parent->radio_fem_txgain);
-    // #endif
-    //   def("tx", _parent->tx_power_dbm);
-    //   def("rxdelay", _parent->rx_delay_base);
-    //   //def("f_txdelay", _parent->tx_delay_factor);   currently hard-coded
-    //   //def("d_txdelay", _parent->direct_tx_delay_factor);  currently hard-coded
-    //   //def("agc_int", _parent->agc_reset_interval);
-    //   def("hash_mode", _parent->path_hash_mode);
-    //   def("multi_ack", _parent->multi_acks);
+  virtual bool isCadEnabled() const = 0;
+  virtual void setCadEnabled(bool en) = 0;
+
+  virtual uint8_t getIntThresh() const = 0;
+  virtual void setIntThresh(uint8_t t) = 0;
+
+  virtual uint8_t getRxGain() const = 0;
+  virtual void setRxGain(uint8_t g) = 0;
+
+  virtual uint8_t getTxPower() const = 0;
+  virtual void setTxPower(uint8_t dbm) = 0;
+
+  virtual float getRxDelay() const = 0;
+  virtual void setRxDelay(float d) = 0;
+
+  virtual uint8_t getAgcResetInt() const = 0;
+  virtual void setAgcResetInt(uint8_t secs) = 0;
+
+  virtual uint8_t getHashMode() const = 0;
+  virtual void setHashMode(uint8_t m) = 0;
+
+  virtual uint8_t getMultiAcks() const = 0;
+  virtual void setMultiAcks(uint8_t m) = 0;
+
+  virtual float getFloodTxDelay() const = 0;
+  virtual void setFloodTxDelay(float d) = 0;
+
+  virtual float getDirectTxDelay() const = 0;
+  virtual void setDirectTxDelay(float d) = 0;
 
   bool handleCommand(const char* command, uint32_t sender_timestamp, char* reply);
 };

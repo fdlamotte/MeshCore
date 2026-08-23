@@ -103,11 +103,31 @@ private:
     float getBandwidth() const override { return _parent->bw; }
     void setBandwidth(float bw) override { _parent->bw = bw; markDirty(); }
     uint8_t getSpreadFactor() const override { return _parent->sf; }
-    void setSpreadFactor(uint8_t sf) { _parent->sf; markDirty(); }
+    void setSpreadFactor(uint8_t sf) override { _parent->sf; markDirty(); }
     uint8_t getCodingRate() const override { return _parent->cr; }
-    void setCodingRate(uint8_t cr) { _parent->cr = cr; markDirty(); }
+    void setCodingRate(uint8_t cr) override { _parent->cr = cr; markDirty(); }
     float getAirtimeFactor() const override { return _parent->airtime_factor; }
     void setAirtimeFactor(float af) override { _parent->airtime_factor = af; markDirty(); }
+    bool isCadEnabled() const override { return _parent->cad_enabled; }
+    void setCadEnabled(bool en) override { _parent->cad_enabled; markDirty(); }
+    uint8_t getIntThresh() const override { return _parent->interference_threshold; }
+    void setIntThresh(uint8_t t) override { _parent->interference_threshold = t; markDirty(); }
+    uint8_t getRxGain() const override { return _parent->rx_boosted_gain; }
+    void setRxGain(uint8_t g) override { _parent->rx_boosted_gain = g; markDirty(); }
+    uint8_t getTxPower() const override { return _parent->tx_power_dbm; }
+    void setTxPower(uint8_t dbm) override { _parent->tx_power_dbm = dbm; markDirty(); }
+    float getRxDelay() const override { return _parent->rx_delay_base; }
+    void setRxDelay(float d) override { _parent->rx_delay_base = d; markDirty(); }
+    uint8_t getAgcResetInt() const override { return _parent->agc_reset_interval * 4; }
+    void setAgcResetInt(uint8_t secs) override { _parent->agc_reset_interval = secs / 4; markDirty(); }
+    uint8_t getHashMode() const override { return _parent->path_hash_mode; }
+    void setHashMode(uint8_t m) override { _parent->path_hash_mode = m; markDirty(); }
+    uint8_t getMultiAcks() const override { return _parent->multi_acks; }
+    void setMultiAcks(uint8_t m) override { _parent->multi_acks = m; markDirty(); }
+    float getFloodTxDelay() const override { return _parent->tx_delay_factor; }
+    void setFloodTxDelay(float d) override { _parent->tx_delay_factor = d; markDirty(); }
+    float getDirectTxDelay() const override { return _parent->direct_tx_delay_factor; }
+    void setDirectTxDelay(float d) override { _parent->direct_tx_delay_factor = d; markDirty(); }
   };
   RadioPrefs radio;
 
