@@ -103,7 +103,9 @@ class HomeScreen : public UIScreen {
 #if UI_SENSORS_PAGE == 1
     SENSORS,
 #endif
+#if !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
     DISCOVERY,
+#endif
     SHUTDOWN,
     Count    // keep as last
   };
@@ -115,9 +117,11 @@ class HomeScreen : public UIScreen {
   uint8_t _page;
   bool _shutdown_init;
   AdvertPath recent[UI_RECENT_LIST_SIZE];
+#if !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
   DiscoveredNode discovered[UI_RECENT_LIST_SIZE];
   uint32_t discovery_req_time = 0;
   bool discovery_disp_names = true; // by default desplay names if available (removes SNR_O)
+#endif
 
   void renderBatteryIndicator(DisplayDriver& display, uint16_t batteryMilliVolts) {
     // Convert millivolts to percentage
@@ -463,6 +467,7 @@ public:
       if (sensors_scroll) sensors_scroll_offset = (sensors_scroll_offset+1)%sensors_nb;
       else sensors_scroll_offset = 0;
 #endif
+#if !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
     } else if (_page == HomePage::DISCOVERY) {
       int count = the_mesh.getDiscoveredNodes(discovered, UI_RECENT_LIST_SIZE);
       display.setColor(UIColor::primary_txt);
@@ -495,7 +500,7 @@ public:
         y = 10 + 11 * UI_RECENT_LIST_SIZE;
         display.drawTextCentered(display.width() / 2, y, "discover: " PRESS_LABEL);
       }
-
+#endif
     } else if (_page == HomePage::SHUTDOWN) {
       display.setColor(UIColor::corp_blue);
       display.setTextSize(1);
@@ -521,9 +526,11 @@ public:
       if (_page == HomePage::RECENT) {
         _task->showAlert("Recent adverts", 800);
       }
+#if !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
       if (_page == HomePage::DISCOVERY) {
         _task->showAlert("Repeater disc", 800);
       }
+#endif
       return true;
     }
     if (c == KEY_ENTER && _page == HomePage::BLUETOOTH) {
@@ -556,6 +563,7 @@ public:
       return true;
     }
 #endif
+#if !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
     if (c == KEY_ENTER && _page == HomePage::DISCOVERY) {
       if (millis() > discovery_req_time + 5000) { // rate limiter
         the_mesh.requestRepeatersDiscovery();
@@ -567,6 +575,7 @@ public:
       discovery_disp_names = !discovery_disp_names;
       return true;
     }
+#endif
     if (c == KEY_ENTER && _page == HomePage::SHUTDOWN) {
       _shutdown_init = true;  // need to wait for button to be released
       return true;

@@ -407,6 +407,7 @@ int MyMesh::getRecentlyHeard(AdvertPath dest[], int max_num) {
   return max_num;
 }
 
+#if defined(DISPLAY_CLASS) && !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
 int MyMesh::getDiscoveredNodes(DiscoveredNode nodes[], int max_num) {
   if (max_num > DISCOVERED_NODES_TABLE_SIZE) max_num = DISCOVERED_NODES_TABLE_SIZE;
   if (max_num > disc_nodes_count) max_num = disc_nodes_count;
@@ -451,6 +452,7 @@ void MyMesh::checkControlDataForPendingDiscovery(uint8_t payload[], size_t p_len
   }
   disc_nodes_count ++;
 }
+#endif
 
 void MyMesh::onContactPathUpdated(const ContactInfo &contact) {
   out_frame[0] = PUSH_CODE_PATH_UPDATED;
@@ -832,7 +834,9 @@ void MyMesh::onControlDataRecv(mesh::Packet *packet) {
     MESH_DEBUG_PRINTLN("onControlDataRecv(), payload_len too long: %d", packet->payload_len);
     return;
   }
+#if defined(DISPLAY_CLASS) && !(defined(UI_NO_DISCOVER_SCREEN) && (UI_NO_DISCOVER_SCREEN + 0 != 0))
   checkControlDataForPendingDiscovery(packet->payload, packet->payload_len);
+#endif
   int i = 0;
   out_frame[i++] = PUSH_CODE_CONTROL_DATA;
   out_frame[i++] = (int8_t)(_radio->getLastSNR() * 4);
