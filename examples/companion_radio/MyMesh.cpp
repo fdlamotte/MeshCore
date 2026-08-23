@@ -534,8 +534,13 @@ void MyMesh::onCommandDataRecv(const ContactInfo &from, mesh::Packet *pkt, uint3
                                const char *text, char* reply) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
   if (from.isRemoteCLIAllowed()) {
-    if (!handleCommand(text, sender_timestamp, reply)) {
-      strcat(reply, "Unknown command");   // reply may have cmd prefix from 'text'
+    if (text[0] == '>') {   // is this a CLI reply?
+      queueMessage(from, TXT_TYPE_CLI_DATA, pkt, sender_timestamp, NULL, 0, &text[1]);
+    } else {
+      *reply++ = '>';   // ensure the special 'is reply' prefix
+      if (!handleCommand(text, sender_timestamp, reply)) {
+        strcat(reply, "Unknown command");   // reply may have cmd prefix from 'text'
+      }
     }
   }
 }
