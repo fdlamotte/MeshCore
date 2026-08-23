@@ -533,10 +533,10 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
 void MyMesh::onCommandDataRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
                                const char *text, char* reply) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
-  if (from.isRemoteCLIAllowed() && handleCommand(text, sender_timestamp, reply)) {
-    // CLI command was handled.  Let BaseChatMesh handle the sending of the reply
-  } else {
-    queueMessage(from, TXT_TYPE_CLI_DATA, pkt, sender_timestamp, NULL, 0, text);
+  if (from.isRemoteCLIAllowed()) {
+    if (!handleCommand(text, sender_timestamp, reply)) {
+      strcat(reply, "Unknown command");   // reply may have cmd prefix from 'text'
+    }
   }
 }
 
@@ -1095,14 +1095,13 @@ void MyMesh::handleCmdFrame(size_t len) {
     text[tlen] = 0; // ensure null
 
     reply_buf[0] = 0;
-    if (handleCommand(text, 0, reply_buf)) {
-      out_frame[0] = RESP_CODE_CLI_REPLY;
-      int rlen = strlen(reply_buf);
-      memcpy(&out_frame[1], reply_buf, rlen);
-      _serial->writeFrame(out_frame, 1 + rlen);
-    } else {
-      writeErrFrame(ERR_CODE_ILLEGAL_ARG);  // unsupported command
+    if (!handleCommand(text, 0, reply_buf)) {
+      strcat(reply_buf, "Unknown command");   // reply_buf may have cmd prefix from 'text'
     }
+    out_frame[0] = RESP_CODE_CLI_REPLY;
+    int rlen = strlen(reply_buf);
+    memcpy(&out_frame[1], reply_buf, rlen);
+    _serial->writeFrame(out_frame, 1 + rlen);
   } else if (cmd_frame[0] == CMD_SEND_TXT_MSG && len >= 14) {
     int i = 1;
     uint8_t txt_type = cmd_frame[i++];
