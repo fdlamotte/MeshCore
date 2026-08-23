@@ -542,6 +542,8 @@ void MyMesh::onCommandDataRecv(const ContactInfo &from, mesh::Packet *pkt, uint3
         strcat(reply, "Unknown command");   // reply may have cmd prefix from 'text'
       }
     }
+  } else {
+    queueMessage(from, TXT_TYPE_CLI_DATA, pkt, sender_timestamp, NULL, 0, text);
   }
 }
 
