@@ -183,6 +183,6 @@ public:
   CommonRadioPrefs* getRadioPrefs() { return &radio; }
   KeyValueStore* getCustom() { return &custom; }
 
-  bool isDirty() const override { return ConfigSerializer::isDirty() || radio.isDirty(); }
-  void clearDirty() override { ConfigSerializer::clearDirty(); radio.clearDirty(); }
+  bool isDirty() const override { return ConfigSerializer::isDirty() || radio.isDirty() || custom.isDirty(); }
+  void clearDirty() override { ConfigSerializer::clearDirty(); radio.clearDirty(); custom.clearDirty(); }
 };

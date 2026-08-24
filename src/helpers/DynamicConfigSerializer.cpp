@@ -38,6 +38,7 @@ bool DynamicConfigSerializer::setByKey(const char* key, const char* value) {
     strcat(new_config, KEY_SEP_STR);
     strcat(new_config, value);
     strcpy(_config, new_config);  // commit new serialized string
+    markDirty();
     return true;
   }
   return false;   // didn't fit in _config[]
