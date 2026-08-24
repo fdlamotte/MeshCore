@@ -726,7 +726,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   radio_driver.setTxPower(_prefs.tx_power_dbm);
   radio_driver.setRxBoostedGainMode(_prefs.rx_boosted_gain);
 
-  board.attachDynamicPrefs(_prefs.getRadioPrefs());
+  board.attachDynamicPrefs(_prefs.getCustom());
 
   updateAdvertTimer();
   updateFloodAdvertTimer();

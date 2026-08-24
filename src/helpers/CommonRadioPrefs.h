@@ -2,7 +2,7 @@
 #include "ConfigSerializer.h"
 #include "KeyValueStore.h"
 
-class CommonRadioPrefs : public ConfigSerializer, public KeyValueStore{
+class CommonRadioPrefs : public ConfigSerializer, public KeyValueStore {
   bool _is_dirty = false;
 protected:
   CommonRadioPrefs() { }
@@ -64,6 +64,6 @@ public:
 
   bool handleCommand(const char* command, uint32_t sender_timestamp, char* reply);
 
-  void setByKey(const char* key, const char* value) override;   // for dynamic key/value access
-  void getByKey(const char* key, char* value, size_t max_len) override;
+  bool setByKey(const char* key, const char* value) override;   // for dynamic key/value access
+  bool getByKey(const char* key, char* value, size_t max_len) override;
 };

@@ -7,6 +7,7 @@
 #include <helpers/RegionMap.h>
 #include <helpers/ConfigSerializer.h>
 #include <helpers/CommonRadioPrefs.h>
+#include <helpers/DynamicConfigSerializer.h>
 
 #if defined(WITH_RS232_BRIDGE) || defined(WITH_ESPNOW_BRIDGE)
 #define WITH_BRIDGE
@@ -202,6 +203,8 @@ private:
   };
   RoomPrefs room;
 
+  DynamicConfigSerializer custom;
+
 protected:
   void structure() override {
     def("name", node_name, sizeof(node_name));
@@ -218,10 +221,11 @@ protected:
     def("repeat", repeat);
     def("room", room);
     def("power", power);
+    def("custom", custom);
   }
 
 public:
-  NodePrefs() : ConfigSerializer(), bridge(this), gps(this), radio(this), power(this), repeat(this), room(this) {
+  NodePrefs() : ConfigSerializer(), bridge(this), gps(this), radio(this), power(this), repeat(this), room(this), custom(&radio) {
     node_name[0] = 0;
     password[0] = 0;
     guest_password[0] = 0;
@@ -230,6 +234,8 @@ public:
   }
 
   CommonRadioPrefs* getRadioPrefs() { return &radio; }
+  KeyValueStore* getCustom() { return &custom; }
+
   bool isDirty() const override { return ConfigSerializer::isDirty() || radio.isDirty(); }
   void clearDirty() override { ConfigSerializer::clearDirty(); radio.clearDirty(); }
 };

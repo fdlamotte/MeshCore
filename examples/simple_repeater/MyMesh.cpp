@@ -983,7 +983,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   MESH_DEBUG_PRINTLN("RX Boosted Gain Mode: %s",
                      radio_driver.getRxBoostedGainMode() ? "Enabled" : "Disabled");
 
-  board.attachDynamicPrefs(_prefs.getRadioPrefs());
+  board.attachDynamicPrefs(_prefs.getCustom());
 
   updateAdvertTimer();
   updateFloodAdvertTimer();

@@ -2,6 +2,7 @@
 #include <cstdint> // For uint8_t, uint32_t
 #include <helpers/ConfigSerializer.h>
 #include <helpers/CommonRadioPrefs.h>
+#include <helpers/DynamicConfigSerializer.h>
 
 #define TELEM_MODE_DENY            0
 #define TELEM_MODE_ALLOW_FLAGS     1     // use contact.flags
@@ -154,6 +155,8 @@ private:
   };
   CompanionPrefs companion;
 
+  DynamicConfigSerializer custom;
+
 protected:
   void structure() override {
     def("name", node_name, sizeof(node_name));
@@ -165,9 +168,10 @@ protected:
     def("gps", gps);
     def("repeat", repeat);
     def("comp", companion);
+    def("custom", custom);
   }
 public:
-  NodePrefs() : radio(this), gps(this), companion(this) {
+  NodePrefs() : radio(this), gps(this), companion(this), custom(&radio) {
     node_name[0] = 0;
     default_scope_name[0] = 0;
     memset(default_scope_key, 0, sizeof(default_scope_key));
@@ -177,6 +181,8 @@ public:
   void setRepeatEn(bool en) { repeat.disable_fwd = en ? 0 : 1; }
 
   CommonRadioPrefs* getRadioPrefs() { return &radio; }
+  KeyValueStore* getCustom() { return &custom; }
+
   bool isDirty() const override { return ConfigSerializer::isDirty() || radio.isDirty(); }
   void clearDirty() override { ConfigSerializer::clearDirty(); radio.clearDirty(); }
 };
