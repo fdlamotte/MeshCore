@@ -264,7 +264,7 @@ int MyMesh::getInterferenceThreshold() const {
   return 0; // disabled for now, until currentRSSI() problem is resolved
 }
 bool MyMesh::getCADEnabled() const {
-  return false; // hardware CAD before TX (disabled by default, until configurable)
+  return _prefs.cad_enabled;
 }
 
 int MyMesh::calcRxDelay(float score, uint32_t air_time) const {
@@ -2099,6 +2099,11 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     _prefs.ble_pin = atoi(&command[8]);
     savePrefs();
     sprintf(reply, "> pin is now %06d", _prefs.ble_pin);
+    return true;
+  }
+
+  if (strcmp(command, "board") == 0) {
+    strcpy(reply, board.getManufacturerName());
     return true;
   }
 

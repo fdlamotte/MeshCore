@@ -40,6 +40,7 @@ public:
   uint8_t _client_repeat = 0;  // DEPRECATED -> use repeat.disable_fwd
   uint8_t path_hash_mode = 0;    // which path mode to use when sending
   uint8_t autoadd_max_hops = 0;  // 0 = no limit, 1 = direct (0 hops), N = up to N-1 hops (max 64)
+  uint8_t cad_enabled = 0;
   char default_scope_name[31];
   uint8_t default_scope_key[16];
 
@@ -52,7 +53,7 @@ private:
       def("bw", _parent->bw);
       def("sf", _parent->sf);
       def("cr", _parent->cr);
-      //def("cad", _parent->cad_enabled);
+      def("cad", _parent->cad_enabled);
       //def("int_thr", _parent->interference_threshold);
       def("rxgain", _parent->rx_boosted_gain);
       def("fem_rxgain", _parent->radio_fem_rxgain);   // fem_rxgain WAS mapped to wrong JSON property previously
@@ -75,7 +76,7 @@ private:
     float getBandwidth() const override { return _parent->bw; }
     void setBandwidth(float bw) override { _parent->bw = bw; markDirty(); }
     uint8_t getSpreadFactor() const override { return _parent->sf; }
-    void setSpreadFactor(uint8_t sf) override { _parent->sf; markDirty(); }
+    void setSpreadFactor(uint8_t sf) override { _parent->sf = sf; markDirty(); }
     uint8_t getCodingRate() const override { return _parent->cr; }
     void setCodingRate(uint8_t cr) override { _parent->cr = cr; markDirty(); }
     float getAirtimeFactor() const override { return _parent->airtime_factor; }
