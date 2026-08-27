@@ -81,8 +81,8 @@ private:
     void setCodingRate(uint8_t cr) override { _parent->cr = cr; markDirty(); }
     float getAirtimeFactor() const override { return _parent->airtime_factor; }
     void setAirtimeFactor(float af) override { _parent->airtime_factor = af; markDirty(); }
-    bool isCadEnabled() const override { return false; }
-    void setCadEnabled(bool en) override { /* no-op */ }
+    bool isCadEnabled() const override { return _parent->cad_enabled; }
+    void setCadEnabled(bool en) override { _parent->cad_enabled = en; markDirty(); }
     uint8_t getIntThresh() const override { return 0; }
     void setIntThresh(uint8_t t) override { /* no-op */ }
     uint8_t getRxGain() const override { return _parent->rx_boosted_gain; }
