@@ -249,7 +249,15 @@ public:
             if (_firstFixInWindow != 0 && (long)(_onceDeadline - (millis() + GPS_FIX_SETTLE_MS)) > 0) {
                 _onceDeadline = millis() + GPS_FIX_SETTLE_MS;
             }
-            if ((long)(millis() - _onceDeadline) >= 0) setGpsOn(false);
+            if ((long)(millis() - _onceDeadline) >= 0) {
+                if (_driver->isActive()) {
+                    setGpsOn(false);
+                } else { // do not stop twice
+                    _gpsOn = false;
+                    _onceDeadline = 0;
+                    _acquiringPeriodically = false;
+                }
+            }
         }
 
         if (_gpsOn && _gpsPeriodSeconds > 0 && !_acquiringPeriodically &&
